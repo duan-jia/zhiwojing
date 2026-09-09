@@ -1,21 +1,12 @@
 # 知乎数字分身 MVP
 
-这是一个围绕“灵魂匹配局：社区 × 社交”的表达型数字分身原型。用户可以在“分身小镇”中移动角色，到创作屋用模板生成草稿、在热榜广场查看讨论，或到探索馆发现问题、使用知乎搜索、全网搜索和知乎直答。当前使用 mock 用户，尚未接入真实登录。
+这是一个围绕“灵魂匹配局：社区 × 社交”的数字分身原型。目前前端先聚焦地图与角色行走：使用 React、TypeScript 和 Phaser 3 实现独立的 2.5D 菱形地图 Demo；原有知乎搜索、创作和 OAuth 后端能力暂不接入这一版地图。
 
 当前架构、能力状态和阶段边界见 [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)。
 
 ## 本地运行
 
-后端（Python 3.11+）：
-
-```bash
-cd backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
-```
-
-前端（Node 22.12+，建议使用 Node 24）：
+当前地图 Demo 只需启动前端（Node 22.12+，建议使用 Node 24）：
 
 ```bash
 cd frontend
@@ -23,7 +14,16 @@ npm ci
 npm run dev
 ```
 
-打开 http://localhost:5173，使用 WASD 或方向键移动，靠近地点后按 E 互动。当前默认使用 mock 用户；OAuth 后端接口仍为安全禁用的占位，不会发起真实授权或调用用户数据接口。
+打开 http://localhost:5173，使用 WASD 或方向键八方向行走，鼠标滚轮缩放地图。“换一张地图”会重新随机生成地块和环境物体。水域、树木和石头不可穿越。
+
+如需单独验证已有后端能力，可另行启动后端（Python 3.11+）：
+
+```bash
+cd backend
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
 
 ## 知乎开放平台配置
 
