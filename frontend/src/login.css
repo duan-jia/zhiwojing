@@ -1,0 +1,309 @@
+:root {
+  font-family: Fredoka, "Noto Sans SC", system-ui, sans-serif;
+  color: #172033;
+  background: #102c59;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button {
+  font: inherit;
+}
+
+button:focus-visible {
+  outline: 3px solid #ffcb3d;
+  outline-offset: 3px;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+#login-root {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+}
+
+.login-screen {
+  width: 100%;
+  min-height: 100dvh;
+  padding: 22px;
+  overflow: hidden;
+  background: #102c59;
+}
+
+.login-scene {
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-height: calc(100dvh - 44px);
+  overflow: hidden;
+  border: 5px solid #071b38;
+  background:
+    linear-gradient(180deg, transparent 0 64%, #8fc365 64% 69%, #68472c 69% 77%, #45301f 77% 100%),
+    linear-gradient(180deg, #8bd2ed 0 64%, transparent 64%);
+  box-shadow: inset 0 0 0 5px #d6f2ff52, 10px 10px 0 #07172d;
+  isolation: isolate;
+}
+
+.login-stars {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  opacity: .8;
+}
+
+.login-stars i {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: #fff5a8;
+  box-shadow: 8px 0 #fff5a8, 4px -4px #fff5a8, 4px 4px #fff5a8;
+  animation: star-blink 1.8s steps(2, end) infinite;
+}
+
+.login-stars i:nth-child(1) { left: 8%; top: 14%; }
+.login-stars i:nth-child(2) { left: 44%; top: 9%; animation-delay: .4s; }
+.login-stars i:nth-child(3) { right: 9%; top: 20%; animation-delay: .8s; }
+.login-stars i:nth-child(4) { right: 38%; top: 36%; animation-delay: 1.2s; }
+
+.login-landscape {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  overflow: hidden;
+}
+
+.login-landscape span {
+  position: absolute;
+  bottom: 31%;
+  width: 240px;
+  height: 170px;
+  background: #5f9652;
+  clip-path: polygon(0 100%, 0 65%, 18% 65%, 18% 47%, 35% 47%, 35% 27%, 55% 27%, 55% 43%, 72% 43%, 72% 66%, 100% 66%, 100% 100%);
+  box-shadow: inset 0 12px #80bd68;
+}
+
+.login-landscape span:nth-child(1) { left: 3%; }
+.login-landscape span:nth-child(2) { left: 40%; width: 310px; transform: scale(.72); transform-origin: bottom; }
+.login-landscape span:nth-child(3) { right: -2%; width: 280px; transform: scale(.9); transform-origin: bottom; }
+
+.login-copy {
+  position: relative;
+  z-index: 3;
+  width: min(560px, 50vw);
+  align-self: center;
+  margin: -2vh 0 0 8%;
+  padding: 34px;
+  border: 4px solid #17345f;
+  background: #fffdf2f2;
+  box-shadow: 8px 8px 0 #17345f70, inset 0 0 0 4px #c9dcf0;
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 36px;
+  color: #16365d;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.login-logo,
+.oauth-icon {
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 900;
+}
+
+.login-logo {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #0a438f;
+  background: #1772f6;
+  box-shadow: inset -4px -4px #0d58bf;
+}
+
+.login-eyebrow {
+  margin: 0 0 10px;
+  color: #0d4fa8;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .17em;
+}
+
+.login-copy h1 {
+  margin: 0;
+  color: #172033;
+  font-size: clamp(42px, 5vw, 68px);
+  line-height: 1.06;
+  letter-spacing: -.055em;
+}
+
+.login-copy h1 em {
+  color: #1772f6;
+  font-style: normal;
+  text-shadow: 3px 3px #c9ddfa;
+}
+
+.login-intro {
+  max-width: 470px;
+  margin: 19px 0 24px;
+  color: #52657d;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.login-actions {
+  display: grid;
+  gap: 11px;
+  width: min(390px, 100%);
+}
+
+.enter-game-button,
+.oauth-login-button {
+  min-height: 54px;
+  border: 3px solid #17345f;
+  box-shadow: 4px 4px #17345f54;
+  cursor: pointer;
+}
+
+.enter-game-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: #1772f6;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: .05em;
+}
+
+.enter-game-button span { color: #ffdc52; }
+.enter-game-button:hover { background: #0f62d6; transform: translateY(-2px); }
+
+.oauth-login-button {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 8px 12px;
+  background: #f3eedc;
+  color: #3c506b;
+  text-align: left;
+}
+
+.oauth-login-button:disabled {
+  cursor: not-allowed;
+  opacity: .65;
+}
+
+.oauth-icon {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  background: #aab5c3;
+  box-shadow: inset -4px -4px #8491a2;
+}
+
+.oauth-login-button > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.oauth-login-button strong { font-size: 12px; }
+.oauth-login-button small { color: #6c7889; font-size: 9px; }
+
+.login-status {
+  min-height: 18px;
+  margin: 14px 0 0;
+  color: #65758a;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.login-character {
+  position: absolute;
+  z-index: 2;
+  right: 10%;
+  bottom: 14%;
+  width: min(280px, 27vw);
+  aspect-ratio: 1;
+  filter: drop-shadow(10px 12px #203f4c35);
+}
+
+.login-character-sprite {
+  position: absolute;
+  bottom: 10%;
+  left: 50%;
+  width: 58%;
+  aspect-ratio: 1;
+  background: url('/spritesheets/hero.png') 50% 0 / 300% 400% no-repeat;
+  image-rendering: pixelated;
+  transform: translateX(-50%);
+  animation: login-idle 2s steps(2, end) infinite;
+}
+
+.login-character-shadow {
+  position: absolute;
+  right: 18%;
+  bottom: 7%;
+  left: 18%;
+  height: 8%;
+  background: #203e3157;
+  box-shadow: 7px 5px #203e3129;
+}
+
+.login-speech {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: 0;
+  padding: 9px 12px;
+  border: 3px solid #17345f;
+  background: #fffdf2;
+  color: #203653;
+  font-size: 11px;
+  font-weight: 900;
+  box-shadow: 4px 4px #17345f3d;
+}
+
+.login-version {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  color: #d9e7c1;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .12em;
+}
+
+@keyframes star-blink {
+  50% { opacity: .3; transform: scale(.75); }
+}
+
+@keyframes login-idle {
+  50% { transform: translate(-50%, -7px); }
+}
+
+@media (max-width: 720px) {
+  .login-screen { padding: 10px; }
+  .login-scene { min-height: calc(100dvh - 20px); border-width: 3px; }
+  .login-copy { width: calc(100% - 28px); margin: auto 14px 18vh; padding: 24px 20px; }
+  .login-brand { margin-bottom: 24px; }
+  .login-copy h1 { font-size: clamp(36px, 11vw, 52px); }
+  .login-character { right: 5%; bottom: 2%; width: 42vw; opacity: .72; }
+  .login-speech { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-stars i,
+  .login-character-sprite { animation: none; }
+}

@@ -1,6 +1,6 @@
 # 知乎数字分身 MVP
 
-这是一个围绕“灵魂匹配局：社区 × 社交”的数字分身原型。目前前端先聚焦地图与角色行走：使用 React、TypeScript 和 Phaser 3 实现独立的 2.5D 菱形地图 Demo；原有知乎搜索、创作和 OAuth 后端能力暂不接入这一版地图。
+这是一个围绕“灵魂匹配局：社区 × 社交”的数字分身原型。目前前端先使用 RPGJS v5 验证一张 100×100 Tiled 地图组成的小型开放世界和角色行走；原有知乎搜索、创作和 OAuth 后端能力暂未接入这一版地图。
 
 当前架构、能力状态和阶段边界见 [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)。
 
@@ -14,7 +14,7 @@ npm ci
 npm run dev
 ```
 
-打开 http://localhost:5173，使用 WASD 或方向键八方向行走，鼠标滚轮缩放地图。“换一张地图”会重新随机生成地块和环境物体。水域、树木和石头不可穿越。
+打开 http://localhost:5173。登录页会读取服务端 OAuth 状态；真实授权尚未开放时仍可选择“游客身份进入”，随后使用 WASD 或方向键移动。玩家从西北草地出生，可沿六格宽的泥土通路连续进入其他三个景观区域，过程中不会触发换图。当前地图和角色素材来自 RPGJS v5 官方 starter，图形素材署名见 `frontend/readme.md`。
 
 如需单独验证已有后端能力，可另行启动后端（Python 3.11+）：
 
@@ -92,6 +92,6 @@ App ID、OAuth App Key 和 Access Secret 是三种不同凭证，不能互相替
 
 ## 验证
 
-前端：在 `frontend/` 运行 `npm run typecheck` 检查类型；`npm run build` 会先检查类型，再生成生产构建。
+前端：在 `frontend/` 运行 `npm test` 验证四区源图、合并后的连续地图、登录门禁、地图资源及根路径/子路径生产预览；运行 `npm run build:map` 可从四区源图重新生成连续地图，运行 `npm run build` 生成生产构建。
 
 后端：安装依赖后，在 `backend/` 运行 `python -m unittest discover -s tests -v`。测试使用临时 SQLite 数据库，覆盖输入校验、语气和结构、用户初始化及接口错误。

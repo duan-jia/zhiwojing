@@ -1,13 +1,44 @@
-<!doctype html>
-<html lang="zh-CN">
+<!DOCTYPE html>
+<html>
   <head>
-    <meta charset="UTF-8"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <meta name="theme-color" content="#746e5d"/>
-    <title>晴野漫游 · 2.5D 行走 Demo</title>
+    <meta charset="utf-8" />
+    <title>知我境 · 像素开放世界</title>
+    <meta
+      name="viewport"
+      content="initial-scale=1, maximum-scale=1, user-scalable=no, minimum-scale=1, width=device-width, height=device-height"
+    />
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./node_modules/@rpgjs/ui-css/src/reset.css">
+    <link rel="stylesheet" href="./node_modules/@rpgjs/ui-css/src/index.css">
+    <link rel="stylesheet" href="./node_modules/@rpgjs/ui-css/theme-default/theme.css">
+    <style>
+      body, #rpg {
+        margin: 0;
+        padding: 0;
+        height: 100vh;
+        width: 100vw;
+        overflow: hidden;
+      }
+
+      .controls-hint {
+        position: fixed;
+        z-index: 10;
+        right: 18px;
+        bottom: 18px;
+        padding: 10px 14px;
+        border: 1px solid rgb(255 255 255 / 35%);
+        border-radius: 10px;
+        color: #fff;
+        background: rgb(24 31 24 / 72%);
+        font: 600 14px/1.6 Fredoka, system-ui, sans-serif;
+        box-shadow: 0 6px 20px rgb(0 0 0 / 22%);
+        pointer-events: none;
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <div id="login-root"></div>
+    <div id="rpg" hidden></div>
+    <div class="controls-hint" hidden>WASD / 方向键移动</div>
   </body>
 </html>
