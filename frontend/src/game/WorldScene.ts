@@ -1,20 +1,17 @@
 import Phaser from 'phaser';
 import {
-  generateWorld,
   MAP_HEIGHT,
   MAP_WIDTH,
-  SPAWN,
   TILE_HEIGHT,
   TILE_WIDTH,
   terrainEdges,
   toScreen,
   type GeneratedWorld,
+  type AvatarState,
   type GroundType,
   type TerrainEdge,
 } from './world';
 
-const PLAYER_SPEED = 168;
-const PLAYER_RADIUS = .22;
 const MIN_ZOOM = .52;
 const MAX_ZOOM = 1.55;
 
@@ -22,12 +19,11 @@ type MovementKeys = Record<'W' | 'A' | 'S' | 'D' | 'UP' | 'DOWN' | 'LEFT' | 'RIG
 
 export class WorldScene extends Phaser.Scene {
   private world!: GeneratedWorld;
-  private player!: Phaser.GameObjects.Sprite;
-  private shadow!: Phaser.GameObjects.Ellipse;
+  private players = new Map<string, {sprite: Phaser.GameObjects.Sprite; shadow: Phaser.GameObjects.Ellipse; label: Phaser.GameObjects.Text; state: AvatarState}>();
+  private playerId = '';
+  private socket?: WebSocket;
   private waterTiles: Array<{image: Phaser.GameObjects.Image; phase: number}> = [];
   private keys!: MovementKeys;
-  private gridX = SPAWN.x + .5;
-  private gridY = SPAWN.y + .5;
   private facingFrame = 0;
   private walkTime = 0;
   private targetZoom = .9;
@@ -52,11 +48,8 @@ export class WorldScene extends Phaser.Scene {
   }
 
   create() {
-    this.world = generateWorld();
-    this.drawWorld();
-    this.createPlayer();
     this.configureInput();
-    this.configureCamera();
+    this.connect();
   }
 
   update(time: number, delta: number) {
@@ -72,23 +65,25 @@ export class WorldScene extends Phaser.Scene {
       const length = Math.hypot(screenX, screenY);
       screenX /= length;
       screenY /= length;
-      const pixels = PLAYER_SPEED * Math.min(delta, 34) / 1000;
-      const moveGridX = (screenY / TILE_HEIGHT + screenX / TILE_WIDTH) * pixels;
-      const moveGridY = (screenY / TILE_HEIGHT - screenX / TILE_WIDTH) * pixels;
-      this.tryMove(moveGridX, moveGridY);
+      const moveGridX = screenY / TILE_HEIGHT + screenX / TILE_WIDTH;
+      const moveGridY = screenY / TILE_HEIGHT - screenX / TILE_WIDTH;
+      if (this.socket?.readyState === WebSocket.OPEN) {
+        this.socket.send(JSON.stringify({type: 'move', dx: moveGridX, dy: moveGridY, elapsed: Math.min(delta, 100) / 1000}));
+      }
       this.facingFrame = this.directionFrame(screenX, screenY);
-      this.player.setFrame(this.facingFrame);
+      this.players.get(this.playerId)?.sprite.setFrame(this.facingFrame);
       this.walkTime += delta;
     } else {
       this.walkTime = 0;
     }
 
-    const position = toScreen(this.gridX, this.gridY);
-    const bob = moving ? Math.sin(this.walkTime * .018) * 3 : 0;
-    this.player.setPosition(position.x, position.y - 8 + bob);
-    this.shadow.setPosition(position.x, position.y + 3);
-    this.player.setDepth(position.y + 1);
-    this.shadow.setDepth(position.y);
+    this.players.forEach(({sprite, shadow, label, state}, id) => {
+      const position = toScreen(state.x, state.y);
+      const bob = id === this.playerId && moving ? Math.sin(this.walkTime * .018) * 3 : 0;
+      sprite.setPosition(position.x, position.y - 8 + bob).setDepth(position.y + 1);
+      shadow.setPosition(position.x, position.y + 3).setDepth(position.y);
+      label.setPosition(position.x, position.y - 92 + bob).setDepth(position.y + 2);
+    });
 
     this.waterTiles.forEach(({image, phase}) => {
       image.setAlpha(.92 + Math.sin(time * .0014 + phase) * .045);
@@ -98,6 +93,32 @@ export class WorldScene extends Phaser.Scene {
     if (Math.abs(camera.zoom - this.targetZoom) > .001) {
       camera.setZoom(Phaser.Math.Linear(camera.zoom, this.targetZoom, .14));
     }
+  }
+
+  private connect() {
+    const stored = sessionStorage.getItem('town-avatar-id');
+    this.playerId = stored || crypto.randomUUID();
+    sessionStorage.setItem('town-avatar-id', this.playerId);
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    this.socket = new WebSocket(`${protocol}//${location.hostname}:8000/ws/world/zhihu-town`);
+    this.socket.addEventListener('open', () => {
+      this.socket?.send(JSON.stringify({type: 'join', avatarId: this.playerId, name: `旅人-${this.playerId.slice(0, 4)}`}));
+    });
+    this.socket.addEventListener('message', event => {
+      const message = JSON.parse(event.data) as {type: string; map?: GeneratedWorld; avatars?: AvatarState[]; avatar?: AvatarState; avatarId?: string};
+      if (message.type === 'welcome' && message.map && message.avatars) {
+        this.world = message.map;
+        this.drawWorld();
+        message.avatars.forEach(avatar => this.upsertPlayer(avatar));
+        this.configureCamera();
+      } else if ((message.type === 'join' || message.type === 'position') && message.avatar) {
+        this.upsertPlayer(message.avatar);
+      } else if (message.type === 'leave' && message.avatarId) {
+        this.removePlayer(message.avatarId);
+      }
+    });
+    const heartbeat = window.setInterval(() => this.socket?.readyState === WebSocket.OPEN && this.socket.send(JSON.stringify({type: 'ping'})), 15000);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { window.clearInterval(heartbeat); this.socket?.close(); });
   }
 
   private drawWorld() {
@@ -213,12 +234,28 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  private createPlayer() {
-    const position = toScreen(this.gridX, this.gridY);
-    this.shadow = this.add.ellipse(position.x, position.y + 3, 42, 16, 0x315947, .28);
-    this.player = this.add.sprite(position.x, position.y - 8, 'explorer', this.facingFrame)
-      .setOrigin(.5, .91)
-      .setScale(.205);
+  private upsertPlayer(state: AvatarState) {
+    const existing = this.players.get(state.id);
+    if (existing) {
+      existing.state = state;
+      return;
+    }
+    const position = toScreen(state.x, state.y);
+    const shadow = this.add.ellipse(position.x, position.y + 3, 42, 16, 0x315947, .28);
+    const sprite = this.add.sprite(position.x, position.y - 8, 'explorer', 0)
+      .setOrigin(.5, .91).setScale(.205)
+      .setTint(state.id === this.playerId ? 0xffffff : 0xb8d8ff);
+    const label = this.add.text(position.x, position.y - 92, state.name, {
+      color: '#fffdf3', backgroundColor: '#243b35cc', fontFamily: 'sans-serif', fontSize: '13px', padding: {x: 6, y: 3},
+    }).setOrigin(.5);
+    this.players.set(state.id, {sprite, shadow, label, state});
+  }
+
+  private removePlayer(id: string) {
+    const player = this.players.get(id);
+    if (!player) return;
+    player.sprite.destroy(); player.shadow.destroy(); player.label.destroy();
+    this.players.delete(id);
   }
 
   private configureInput() {
@@ -241,7 +278,8 @@ export class WorldScene extends Phaser.Scene {
     const worldHeight = (MAP_WIDTH + MAP_HEIGHT) * TILE_HEIGHT / 2 + 420;
     const camera = this.cameras.main;
     camera.setBounds(0, 0, worldWidth, worldHeight);
-    camera.startFollow(this.player, true, .09, .09);
+    const local = this.players.get(this.playerId);
+    if (local) camera.startFollow(local.sprite, true, .09, .09);
     this.targetZoom = window.innerWidth < 720 ? .68 : .9;
     camera.setZoom(this.targetZoom);
     camera.setBackgroundColor('#746e5d');
@@ -253,30 +291,6 @@ export class WorldScene extends Phaser.Scene {
       deltaY: number,
     ) => {
       this.targetZoom = Phaser.Math.Clamp(this.targetZoom - deltaY * .001, MIN_ZOOM, MAX_ZOOM);
-    });
-  }
-
-  private tryMove(deltaX: number, deltaY: number) {
-    const nextX = this.gridX + deltaX;
-    const nextY = this.gridY + deltaY;
-    if (this.canOccupy(nextX, this.gridY)) this.gridX = nextX;
-    if (this.canOccupy(this.gridX, nextY)) this.gridY = nextY;
-  }
-
-  private canOccupy(x: number, y: number) {
-    const samples = [
-      [x, y],
-      [x - PLAYER_RADIUS, y],
-      [x + PLAYER_RADIUS, y],
-      [x, y - PLAYER_RADIUS],
-      [x, y + PLAYER_RADIUS],
-    ];
-    return samples.every(([sampleX, sampleY]) => {
-      const cellX = Math.floor(sampleX);
-      const cellY = Math.floor(sampleY);
-      if (cellX < 0 || cellY < 0 || cellX >= MAP_WIDTH || cellY >= MAP_HEIGHT) return false;
-      const cell = this.world.cells[cellY][cellX];
-      return cell.ground !== 'water' && cell.object === null;
     });
   }
 

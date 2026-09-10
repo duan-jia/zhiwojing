@@ -1,11 +1,12 @@
 import os
 import re
+import math
 from datetime import datetime, timezone
 from ipaddress import ip_address
 from typing import Literal, Optional
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ValidationError
@@ -22,6 +23,7 @@ from .zhihu.models import (
     ZhidaInput,
     ZhidaResult,
 )
+from .world import Avatar, SPAWN, world_manager
 
 engine = create_engine("sqlite:///./avatar.db", connect_args={"check_same_thread": False})
 
@@ -178,6 +180,58 @@ async def me(user_id: int = 1):
         if not user:
             raise HTTPException(404, "用户不存在")
         return {"id": user.id, "name": user.name, "profile": {"interests": user.interests.split("、"), "style": user.style}}
+
+
+@app.websocket("/ws/world/{world_id}")
+async def world_socket(websocket: WebSocket, world_id: str):
+    """Join a world and exchange authoritative movement/state messages."""
+    await websocket.accept()
+    world = world_manager.get(world_id)
+    avatar_id: str | None = None
+    try:
+        join = await websocket.receive_json()
+        if join.get("type") != "join":
+            await websocket.close(code=1008, reason="first message must be join")
+            return
+        avatar_id = str(join.get("avatarId") or "")[:64]
+        if not avatar_id:
+            await websocket.close(code=1008, reason="avatarId is required")
+            return
+        name = str(join.get("name") or "旅行者")[:30]
+        async with world.lock:
+            avatar = Avatar(avatar_id, name, *SPAWN)
+            world.avatars[avatar_id] = avatar
+            world.sockets[avatar_id] = websocket
+            await websocket.send_json({
+                "type": "welcome", "avatarId": avatar_id, "map": world.map,
+                "avatars": [item.json() for item in world.avatars.values()],
+            })
+            await world.broadcast({"type": "join", "avatar": avatar.json()})
+
+        while True:
+            message = await websocket.receive_json()
+            message_type = message.get("type")
+            if message_type == "ping":
+                await websocket.send_json({"type": "pong"})
+            elif message_type == "move":
+                try:
+                    dx, dy = float(message.get("dx", 0)), float(message.get("dy", 0))
+                    elapsed = float(message.get("elapsed", 0.05))
+                except (TypeError, ValueError):
+                    continue
+                if not math.isfinite(dx) or not math.isfinite(dy) or not math.isfinite(elapsed):
+                    continue
+                async with world.lock:
+                    avatar = world.move(avatar_id, dx, dy, elapsed)
+                    await world.broadcast({"type": "position", "avatar": avatar.json()})
+    except (WebSocketDisconnect, RuntimeError):
+        pass
+    finally:
+        if avatar_id and world.sockets.get(avatar_id) is websocket:
+            async with world.lock:
+                world.sockets.pop(avatar_id, None)
+                world.avatars.pop(avatar_id, None)
+                await world.broadcast({"type": "leave", "avatarId": avatar_id})
 
 
 async def execute_tool(
