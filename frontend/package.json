@@ -6,9 +6,10 @@
     "dev": "RPG_TYPE=mmorpg vite",
     "build": "RPG_TYPE=mmorpg vite build",
     "build:map": "node scripts/build-nature-map.mjs",
-    "test": "npm run test:world && npm run test:login && npm run test:production",
+    "test": "npm run test:world && npm run test:login && npm run test:chat && npm run test:production",
     "test:world": "node --test test/world-layout.test.mjs",
     "test:login": "node --test test/login-shell.test.mjs",
+    "test:chat": "node --test test/agent-chat.test.mjs",
     "test:production": "node --test test/production-preview.test.mjs",
     "server": "node dist/server/node-server.js"
   },

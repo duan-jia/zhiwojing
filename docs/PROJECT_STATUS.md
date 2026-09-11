@@ -37,3 +37,10 @@ FastAPI 不再持有地图、房间、角色位置或 WebSocket 移动状态；`
 ## 后续安全工作
 
 原 FastAPI 世界层的移动限速、断线清理与空房间 TTL 不再适用。上线前需在 RPGJS 权威侧重新实现并验证限速、防会话接管/身份绑定、断线回收与房间 TTL；这些加固不属于本次迁移范围。
+# Frontend Agent chat
+
+The RPGJS client now places two clickable avatar characters, 苏晚 (`avatar_id=2`)
+and 周博 (`avatar_id=3`), beside the starting point. Clicking either character
+opens the pixel-style Agent chat overlay. The client calls `POST /api/agent/chat`,
+keeps an independent `conversation_id` and message history for each avatar, and
+shows an actionable in-panel error when the API is unavailable.
