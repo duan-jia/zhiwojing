@@ -13,7 +13,14 @@ export default defineConfig({
       buildOutputPath: 'map'            // Match the runtime Tiled URL prefix
     }),
     ...rpgjs({
-      server: startServer
+      server: startServer,
+      entryPoints: {
+        mmorpg: {
+          client: './src/client.ts',
+          server: './src/server.ts',
+          adapters: { 'node-server': './src/node-server.ts' }
+        }
+      }
     })
   ],
 });
