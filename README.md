@@ -6,7 +6,7 @@
 
 ## 本地运行
 
-先启动 FastAPI 多人状态服务（Python 3.11+）：
+先启动 FastAPI「大脑」服务（Python 3.11+）：
 
 ```bash
 cd backend
@@ -15,17 +15,23 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-再启动 RPGJS 前端（Node 22.12+，建议使用 Node 24）：
+再构建并启动独立的 RPGJS 世界服务（Node 22.12+，建议使用 Node 24）：
 
 ```bash
 cd frontend
 npm ci
+npm run build
+npm run server
+```
+
+另开终端启动 Web 客户端：
+
+```bash
+cd frontend
 npm run dev
 ```
 
-打开 http://localhost:5173。登录页会读取服务端 OAuth 状态；真实授权尚未开放时仍可选择“游客身份进入”，随后使用 WASD 或方向键移动。页面显示多人连接、失败、断线和自动重连状态；“换一个多人房间”会生成新的房间 ID 并重新连接，但不会替换 RPGJS 的连续景观地图。
-
-RPGJS gameplay 当前仍在浏览器 standalone bridge 中运行；FastAPI WebSocket 提供多人房间身份和生命周期基座。服务端分配 avatar ID、使用单调时钟限速、清除断线角色，并在空房间保留 5 分钟后回收。
+打开 http://localhost:5173。客户端默认连接 `localhost:8001`；跨主机部署时通过 `VITE_RPGJS_SERVER_HOST` 指定 RPGJS 地址。登录页会读取服务端 OAuth 状态；真实授权尚未开放时仍可选择“游客身份进入”，随后使用 WASD 或方向键移动。RPGJS gameplay 在独立 Node 进程中运行，并作为移动、地图与多人同步的唯一世界权威；多个浏览器客户端加入同一 RPGJS 房间后可互见与同步移动。FastAPI 不再承载游戏房间或移动状态，只保留知乎 Tool Registry、REST 能力与 Agent Loop 契约。
 
 ## 知乎开放平台配置
 
@@ -87,7 +93,7 @@ App ID、OAuth App Key 和 Access Secret 是三种不同凭证，不能互相替
 - `GET /api/zhihu/global-search?query=人工智能&count=10&search_db=all`：搜索全网内容
 - `POST /api/zhihu/answer`：调用知乎直答，请求体为 `{"query":"...","model":"zhida-fast-1p5"}`
 - `POST /api/avatar/draft`：根据想法生成个人风格草稿，可附带最多 10 条 `references`
-- `WS /ws/world/{world_id}`：服务端权威的多人加入、移动、心跳和离开广播
+- `POST /api/agent/init`、`POST /api/agent/chat`、`POST /api/agent/step`：Agent Loop 的显式契约 stub（当前返回 HTTP 501 占位响应）
 
 问题推荐的 `query` 在 API 层可省略；省略时使用服务端 Access Secret 所属账号画像，而不是当前 mock 用户画像。第一版前端要求填写主题，只调用主题推荐模式。
 
@@ -95,6 +101,6 @@ App ID、OAuth App Key 和 Access Secret 是三种不同凭证，不能互相替
 
 ## 验证
 
-前端：在 `frontend/` 运行 `npm test` 验证四区源图、合并后的连续地图、登录门禁、地图资源及根路径/子路径生产预览；运行 `npm run build:map` 可从四区源图重新生成连续地图，运行 `npm run build` 生成生产构建。
+前端：在 `frontend/` 运行 `npm run build` 同时生成 `dist/client` 浏览器产物及 `dist/server` RPGJS Node 世界服务；`npm run server` 启动世界权威。`npm test` 继续运行静态回归检查。
 
 后端：安装依赖后，在 `backend/` 运行 `python -m unittest discover -s tests -v`。测试使用临时 SQLite 数据库，覆盖输入校验、语气和结构、用户初始化及接口错误。
