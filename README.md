@@ -6,17 +6,7 @@
 
 ## 本地运行
 
-当前地图 Demo 只需启动前端（Node 22.12+，建议使用 Node 24）：
-
-```bash
-cd frontend
-npm ci
-npm run dev
-```
-
-打开 http://localhost:5173。登录页会读取服务端 OAuth 状态；真实授权尚未开放时仍可选择“游客身份进入”，随后使用 WASD 或方向键移动。玩家从西北草地出生，可沿六格宽的泥土通路连续进入其他三个景观区域，过程中不会触发换图。当前地图和角色素材来自 RPGJS v5 官方 starter，图形素材署名见 `frontend/readme.md`。
-
-如需单独验证已有后端能力，可另行启动后端（Python 3.11+）：
+先启动 FastAPI 多人状态服务（Python 3.11+）：
 
 ```bash
 cd backend
@@ -24,6 +14,18 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
+
+再启动 RPGJS 前端（Node 22.12+，建议使用 Node 24）：
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+打开 http://localhost:5173。登录页会读取服务端 OAuth 状态；真实授权尚未开放时仍可选择“游客身份进入”，随后使用 WASD 或方向键移动。页面显示多人连接、失败、断线和自动重连状态；“换一个多人房间”会生成新的房间 ID 并重新连接，但不会替换 RPGJS 的连续景观地图。
+
+RPGJS gameplay 当前仍在浏览器 standalone bridge 中运行；FastAPI WebSocket 提供多人房间身份和生命周期基座。服务端分配 avatar ID、使用单调时钟限速、清除断线角色，并在空房间保留 5 分钟后回收。
 
 ## 知乎开放平台配置
 
@@ -85,6 +87,7 @@ App ID、OAuth App Key 和 Access Secret 是三种不同凭证，不能互相替
 - `GET /api/zhihu/global-search?query=人工智能&count=10&search_db=all`：搜索全网内容
 - `POST /api/zhihu/answer`：调用知乎直答，请求体为 `{"query":"...","model":"zhida-fast-1p5"}`
 - `POST /api/avatar/draft`：根据想法生成个人风格草稿，可附带最多 10 条 `references`
+- `WS /ws/world/{world_id}`：服务端权威的多人加入、移动、心跳和离开广播
 
 问题推荐的 `query` 在 API 层可省略；省略时使用服务端 Access Secret 所属账号画像，而不是当前 mock 用户画像。第一版前端要求填写主题，只调用主题推荐模式。
 
