@@ -232,7 +232,7 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
     async def test_startup_does_not_duplicate_user(self):
         main.startup()
         with Session(main.engine) as session:
-            self.assertEqual(len(session.exec(select(main.User)).all()), 1)
+            self.assertEqual(len(session.exec(select(main.User)).all()), 3)
 
     async def test_oauth_status_reports_reserved_interfaces_without_secrets(self):
         with patch.dict(os.environ, self.oauth_environment):

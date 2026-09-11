@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ValidationError
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 
+from .agent import AvatarAgentRuntime
 from .zhihu import CapabilityError, ToolContext, build_tool_registry
 from .zhihu.models import (
     DraftInput,
@@ -44,6 +45,13 @@ class AgentChatRequest(BaseModel):
     message: str
     conversation_id: str | None = None
     user_id: int = 1
+    avatar_id: int = 1
+
+
+class AgentChatResponse(BaseModel):
+    conversation_id: str
+    avatar_id: int
+    response: str
 
 
 class AgentStepRequest(BaseModel):
@@ -171,13 +179,25 @@ def resolve_draft_profile(user_id: int) -> DraftProfile:
 
 
 tool_registry = build_tool_registry(profile_resolver=resolve_draft_profile)
+agent_runtime = AvatarAgentRuntime(tool_registry)
+
+MOCK_AVATARS = (
+    {"zhihu_id": "mock-user", "name": "体验用户", "bio": "AI 产品经理", "interests": "科技、生活、创造", "style": "清晰、真诚、有条理"},
+    {"zhihu_id": "mock-life", "name": "苏晚", "bio": "生活方式作者", "interests": "阅读、旅行、美食", "style": "温柔、细腻、善用比喻"},
+    {"zhihu_id": "mock-science", "name": "周博", "bio": "科普研究员", "interests": "物理、天文、科学史", "style": "严谨、好奇、循序渐进"},
+)
 
 @app.on_event("startup")
 def startup():
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
-        if not session.exec(select(User)).first():
-            session.add(User(zhihu_id="mock-user", name="体验用户"))
+        existing = set(session.exec(select(User.zhihu_id)).all())
+        added = False
+        for avatar in MOCK_AVATARS:
+            if avatar["zhihu_id"] not in existing:
+                session.add(User(**avatar))
+                added = True
+        if added:
             session.commit()
 
 
@@ -194,9 +214,31 @@ async def health():
         "draftProvider": tool_registry.draft_provider_name,
     }
 
-@app.post("/api/agent/chat", response_model=AgentStubResponse, status_code=501)
+@app.post("/api/agent/chat", response_model=AgentChatResponse)
 async def agent_chat(payload: AgentChatRequest):
-    return AgentStubResponse(operation="chat", message="Agent chat loop is not implemented yet.")
+    with Session(engine) as session:
+        avatar = session.get(User, payload.avatar_id)
+        if not avatar:
+            raise HTTPException(404, "分身不存在")
+        profile = {
+            "name": avatar.name,
+            "bio": avatar.bio,
+            "interests": avatar.interests,
+            "style": avatar.style,
+        }
+    conversation_id = payload.conversation_id or f"{payload.user_id}:{payload.avatar_id}"
+    response = await agent_runtime.chat(
+        user_id=payload.user_id,
+        avatar_id=payload.avatar_id,
+        conversation_id=conversation_id,
+        message=payload.message,
+        **profile,
+    )
+    return AgentChatResponse(
+        conversation_id=conversation_id,
+        avatar_id=payload.avatar_id,
+        response=response,
+    )
 
 
 @app.post("/api/agent/step", response_model=AgentStubResponse, status_code=501)

@@ -115,6 +115,13 @@ class ToolRegistry:
     def schemas(self) -> list[dict[str, Any]]:
         return [tool.function_schema() for tool in self._tools.values()]
 
+    def definition(self, name: str) -> ToolDefinition:
+        """Return the executable definition used by agent adapters."""
+        tool = self._tools.get(name)
+        if tool is None:
+            raise CapabilityError(404, "TOOL_NOT_FOUND", f"未知工具：{name}")
+        return tool
+
     async def _generate_draft(
         self,
         payload: BaseModel,
