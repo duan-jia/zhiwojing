@@ -12,6 +12,7 @@ export function startWorldConnection() {
   let timer: number | undefined
   let stopped = false
   let switching = false
+  const avatars = new Map<string, { id: string, name: string, x: number, y: number }>()
 
   const status = document.createElement('aside')
   status.className = 'world-connection'
@@ -29,8 +30,24 @@ export function startWorldConnection() {
     socket = new WebSocket(endpoint)
     socket.addEventListener('open', () => {
       retry = 0
-      label.textContent = '多人世界已连接'
+      label.textContent = '正在加入多人世界…'
       socket?.send(JSON.stringify({ type: 'join', name: '旅行者' }))
+    })
+    socket.addEventListener('message', (event) => {
+      let message: any
+      try { message = JSON.parse(String(event.data)) } catch { return }
+      if (message.type === 'welcome') {
+        avatars.clear()
+        for (const avatar of message.avatars || []) avatars.set(avatar.id, avatar)
+        label.textContent = '多人世界已连接'
+      } else if ((message.type === 'join' || message.type === 'position') && message.avatar) {
+        avatars.set(message.avatar.id, message.avatar)
+      } else if (message.type === 'leave') {
+        avatars.delete(message.avatarId)
+      } else return
+      window.dispatchEvent(new CustomEvent('world-state', {
+        detail: { worldId, message, avatars: Array.from(avatars.values()) }
+      }))
     })
     socket.addEventListener('error', () => { label.textContent = '多人世界加载失败' })
     socket.addEventListener('close', () => {

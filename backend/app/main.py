@@ -1,6 +1,9 @@
 import os
 import re
 import math
+import asyncio
+import time
+from collections import deque
 from datetime import datetime, timezone
 from ipaddress import ip_address
 from typing import Literal, Optional
@@ -12,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ValidationError
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 
-from .world import Avatar, SPAWN, world_manager
+from .world import Avatar, MOVE_RATE_LIMIT, MOVE_TICK, SPAWN, world_manager
 from .zhihu import CapabilityError, ToolContext, build_tool_registry
 from .zhihu.models import (
     DraftInput,
@@ -186,13 +189,24 @@ async def me(user_id: int = 1):
 async def world_socket(websocket: WebSocket, world_id: str):
     """Join a world and exchange authoritative movement/state messages."""
     await websocket.accept()
-    world = world_manager.get(world_id)
+    world = None
     avatar_id: str | None = None
+    mover: asyncio.Task | None = None
+    pending_move: tuple[float, float] | None = None
+    move_times: deque[float] = deque()
     try:
-        join = await websocket.receive_json()
-        if join.get("type") != "join":
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", world_id):
+            await websocket.close(code=1008, reason="invalid world id")
+            return
+        try:
+            join = await asyncio.wait_for(websocket.receive_json(), timeout=5.0)
+        except asyncio.TimeoutError:
+            await websocket.close(code=1008, reason="join timeout")
+            return
+        if not isinstance(join, dict) or join.get("type") != "join":
             await websocket.close(code=1008, reason="first message must be join")
             return
+        world = world_manager.get(world_id)
         name = str(join.get("name") or "旅行者")[:30]
         async with world.lock:
             avatar_id = world_manager.allocate_avatar_id(world)
@@ -205,30 +219,57 @@ async def world_socket(websocket: WebSocket, world_id: str):
             })
             await world.broadcast({"type": "join", "avatar": avatar.json()})
 
+        async def apply_moves() -> None:
+            nonlocal pending_move
+            while True:
+                await asyncio.sleep(MOVE_TICK)
+                move, pending_move = pending_move, None
+                if move is None:
+                    continue
+                async with world.lock:
+                    avatar = world.avatars.get(avatar_id)
+                    if avatar is None:
+                        return
+                    before = (avatar.x, avatar.y)
+                    world.move(avatar_id, *move)
+                    if (avatar.x, avatar.y) != before:
+                        await world.broadcast({"type": "position", "avatar": avatar.json()})
+
+        mover = asyncio.create_task(apply_moves())
+
         while True:
             message = await websocket.receive_json()
             message_type = message.get("type")
             if message_type == "ping":
                 await websocket.send_json({"type": "pong"})
             elif message_type == "move":
+                now = time.monotonic()
+                move_times.append(now)
+                while move_times and now - move_times[0] > 1.0:
+                    move_times.popleft()
+                if len(move_times) > MOVE_RATE_LIMIT:
+                    await websocket.close(code=1008, reason="move rate exceeded")
+                    return
                 try:
                     dx, dy = float(message.get("dx", 0)), float(message.get("dy", 0))
                 except (TypeError, ValueError):
                     continue
                 if not math.isfinite(dx) or not math.isfinite(dy):
                     continue
-                async with world.lock:
-                    avatar = world.move(avatar_id, dx, dy)
-                    await world.broadcast({"type": "position", "avatar": avatar.json()})
+                pending_move = (dx, dy)
     except (WebSocketDisconnect, RuntimeError):
         pass
     finally:
-        if avatar_id and world.sockets.get(avatar_id) is websocket:
+        if mover:
+            mover.cancel()
+        if world is not None and avatar_id and world.sockets.get(avatar_id) is websocket:
             async with world.lock:
                 world.sockets.pop(avatar_id, None)
                 world.avatars.pop(avatar_id, None)
                 await world.broadcast({"type": "leave", "avatarId": avatar_id})
                 world_manager.mark_empty(world)
+        elif world is not None:
+            world_manager.mark_empty(world)
 
 
 async def execute_tool(

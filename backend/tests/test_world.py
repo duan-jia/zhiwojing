@@ -7,6 +7,7 @@ from app.world import Avatar, MAP_HEIGHT, MAP_WIDTH, PLAYER_SPEED, SPAWN, World,
 class WorldTests(unittest.TestCase):
     def test_generated_map_has_expected_shape_and_safe_spawn(self):
         world_map = generate_world(42)
+        self.assertEqual((MAP_WIDTH, MAP_HEIGHT), (100, 100))
         self.assertEqual((world_map["width"], world_map["height"]), (MAP_WIDTH, MAP_HEIGHT))
         self.assertEqual(len(world_map["cells"]), MAP_HEIGHT)
         self.assertTrue(all(len(row) == MAP_WIDTH for row in world_map["cells"]))

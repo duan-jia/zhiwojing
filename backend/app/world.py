@@ -13,11 +13,13 @@ from typing import Any
 
 from fastapi import WebSocket
 
-MAP_WIDTH = 28
-MAP_HEIGHT = 28
+MAP_WIDTH = 100
+MAP_HEIGHT = 100
 SPAWN = (MAP_WIDTH // 2 + 0.5, MAP_HEIGHT // 2 + 0.5)
 PLAYER_RADIUS = 0.22
 PLAYER_SPEED = 3.5  # grid cells per second
+MOVE_TICK = 0.05
+MOVE_RATE_LIMIT = 60
 
 
 def generate_world(seed: int) -> dict[str, Any]:

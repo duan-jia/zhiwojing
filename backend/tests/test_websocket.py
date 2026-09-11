@@ -27,6 +27,19 @@ class WebSocketTests(unittest.TestCase):
             leave = first.receive_json()
             self.assertEqual(leave, {"type": "leave", "avatarId": welcome2["avatarId"]})
 
+    def test_world_is_not_created_until_a_valid_join(self):
+        with self.assertRaises(Exception):
+            with self.client.websocket_connect("/ws/world/not-joined") as socket:
+                socket.send_json({"type": "move", "dx": 1, "dy": 0})
+                socket.receive_json()
+        self.assertNotIn("not-joined", world_manager.worlds)
+
+    def test_invalid_world_id_is_rejected_without_allocating_state(self):
+        with self.assertRaises(Exception):
+            with self.client.websocket_connect("/ws/world/bad%20room") as socket:
+                socket.receive_json()
+        self.assertEqual(world_manager.worlds, {})
+
 
 if __name__ == "__main__":
     unittest.main()
