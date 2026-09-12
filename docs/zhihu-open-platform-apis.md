@@ -66,7 +66,7 @@ X-OAuth-Token: <用户 OAuth access_token，可选>
 - 关键参数：`Count`；可选 `Query`。
 - 响应要点：`Data.Items` 中每项包含 `Title`、`Url`。
 
-### 6. 问题回答 `question_answers` — **项目已用**
+### 6. 问题回答 `question_answers` — **知我居备选**
 
 - 官方文档：[question_answers](https://developer.zhihu.com/docs?key=question_answers)
 - 请求：`GET /api/v1/content/question_answers`
@@ -179,15 +179,15 @@ X-OAuth-Token: <用户 OAuth access_token，可选>
 ### 20. PDF 解析 `pdf_parse` — **知我居备选**
 
 - 官方文档：[pdf_parse](https://developer.zhihu.com/docs?key=pdf_parse)
-- 请求：`POST /api/v1/tools/pdf_parse`（上传及创建任务）；`GET /api/v1/tools/pdf_parse/{task_id}`（轮询任务）。
-- 关键参数：先上传 PDF 获取 `file_id`，再以 `file_id` 创建解析任务；使用返回的 `task_id` 查询状态。
+- 请求：`POST https://developer.zhihu.com/resources/v1/files`（上传文件）；`POST https://developer.zhihu.com/api/v1/pdf-parse/tasks`（创建任务）；`GET https://developer.zhihu.com/api/v1/pdf-parse/tasks/{task_id}`（查询任务）。
+- 关键参数：上传请求使用 `multipart/form-data`，字段名为 `file`，PDF 大小不超过 100 MB；先上传 PDF 获取 `file_id`，再以 `file_id` 创建解析任务；使用返回的 `task_id` 查询状态。
 - 响应要点：任务完成后通过 `result.url` 获取解析结果，即“上传 → `file_id` → 建任务 → 轮询 → `result.url`”。
 
 ### 21. PPT 生成 `ppt_generation` — **知我居备选**
 
 - 官方文档：[ppt_generation](https://developer.zhihu.com/docs?key=ppt_generation)
-- 请求：`POST /api/v1/tools/ppt_generation`（创建任务）；`GET /api/v1/tools/ppt_generation/{task_id}`（轮询任务）。
-- 关键参数：提交作为内容来源的链接，保存返回的 `task_id` 并轮询。
+- 请求：`POST https://developer.zhihu.com/api/v1/ppt-generation/tasks`（创建任务）；`GET https://developer.zhihu.com/api/v1/ppt-generation/tasks/{task_id}`（查询任务）。
+- 关键参数：创建任务使用 JSON 请求体；`resource_url` 必填；`num_pages` 必填，范围 6–21；保存返回的 `task_id` 并轮询。
 - 响应要点：任务完成后返回可下载的 PPTX，即“提交链接 → `task_id` → 轮询 → PPTX”。
 
 ## OAuth（1 项）
