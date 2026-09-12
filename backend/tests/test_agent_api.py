@@ -54,16 +54,41 @@ class AgentContractTests(unittest.IsolatedAsyncioTestCase):
             ):
                 self.assertEqual(resolve_llm_api_key(), "local-test-key")
 
-    async def test_step_and_init_remain_explicit_stubs(self):
-        for operation, payload in [
-            ("init", {"user_id": 1}),
-            ("step", {"conversation_id": "conversation-1"}),
-        ]:
-            with self.subTest(operation=operation):
-                response = await self.post(f"/api/agent/{operation}", payload)
-                self.assertEqual(response.status_code, 501)
-                self.assertEqual(response.json()["status"], "not_implemented")
-                self.assertEqual(response.json()["operation"], operation)
+    async def test_init_remains_explicit_stub(self):
+        response = await self.post("/api/agent/init", {"user_id": 1})
+        self.assertEqual(response.status_code, 501)
+        self.assertEqual(response.json()["operation"], "init")
+
+    async def test_step_returns_move_say_and_idle(self):
+        payload = {
+            "avatar_id": 2,
+            "position": {"x": 23, "y": 23},
+            "locations": [{"id": "well", "name": "水井", "x": 25, "y": 22}],
+            "nearby": [],
+        }
+        original = agent_runtime.step
+        try:
+            for decision in (
+                {"action": "move", "to": {"x": 25, "y": 22, "name": "水井"}},
+                {"action": "say", "text": "今天井边很热闹。"},
+                {"action": "idle"},
+            ):
+                agent_runtime.step = AsyncMock(return_value=decision)
+                response = await self.post("/api/agent/step", payload)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json()["action"], decision["action"])
+        finally:
+            agent_runtime.step = original
+
+    async def test_step_maps_runtime_errors(self):
+        original = agent_runtime.step
+        agent_runtime.step = AsyncMock(side_effect=AgentRuntimeError(502, "LLM_INVALID_RESPONSE", "bad", retryable=True))
+        try:
+            response = await self.post("/api/agent/step", {"avatar_id": 2, "position": {"x": 1, "y": 1}})
+            self.assertEqual(response.status_code, 502)
+            self.assertEqual(response.json()["detail"]["code"], "LLM_INVALID_RESPONSE")
+        finally:
+            agent_runtime.step = original
 
     async def test_chat_loads_avatar_persona(self):
         original = agent_runtime.chat

@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import StructuredTool
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
@@ -169,3 +169,63 @@ class AvatarAgentRuntime:
                     return item.content
                 return json.dumps(item.content, ensure_ascii=False)
         return ""
+
+    async def step(
+        self,
+        *,
+        avatar_id: int,
+        position: dict[str, float],
+        locations: list[dict[str, Any]],
+        nearby: list[dict[str, Any]],
+        persona: str | None = None,
+        last_action: str | None = None,
+    ) -> dict[str, Any]:
+        """Choose one autonomous action for an event-driven world tick.
+
+        The caller invokes this only on state transitions (entering agent mode,
+        arriving, or meeting somebody), never from a timer.
+        """
+        if not locations and not nearby:
+            return {"action": "idle"}
+        prompt = (
+            "你是像素世界里的数字分身行为导演。只输出 JSON，不要 Markdown。"
+            "格式为 {\"action\":\"move|say|idle\",\"location_id\":\"...\","
+            "\"text\":\"...\"}。附近有人时优先 say 且只说一句简短自然的中文；"
+            "否则从给定地点选择一个 location_id 前往，偶尔可 idle。"
+        )
+        observation = {
+            "avatar_id": avatar_id,
+            "position": position,
+            "locations": locations,
+            "nearby": nearby,
+            "persona": persona or "真诚、好奇",
+            "last_action": last_action,
+        }
+        try:
+            reply = await create_llm().ainvoke(
+                [SystemMessage(content=prompt), HumanMessage(content=json.dumps(observation, ensure_ascii=False))]
+            )
+        except AuthenticationError as error:
+            raise AgentRuntimeError(503, "LLM_AUTH_FAILED", "模型服务认证失败，请重新配置有效的 API Key。", retryable=False) from error
+        except RateLimitError as error:
+            raise AgentRuntimeError(429, "LLM_RATE_LIMITED", "模型服务当前请求过多，请稍后重试。", retryable=True) from error
+        except (APITimeoutError, APIConnectionError) as error:
+            raise AgentRuntimeError(503, "LLM_UNAVAILABLE", "暂时无法连接模型服务，请稍后重试。", retryable=True) from error
+        except APIStatusError as error:
+            raise AgentRuntimeError(502, "LLM_UPSTREAM_ERROR", "模型服务返回异常，请稍后重试。", retryable=True) from error
+
+        content = reply.content if isinstance(reply.content, str) else json.dumps(reply.content, ensure_ascii=False)
+        try:
+            raw = json.loads(content.strip().removeprefix("```json").removesuffix("```").strip())
+        except (json.JSONDecodeError, AttributeError) as error:
+            raise AgentRuntimeError(502, "LLM_INVALID_RESPONSE", "模型没有返回有效的分身动作。", retryable=True) from error
+        action = raw.get("action")
+        if action == "say" and str(raw.get("text", "")).strip():
+            return {"action": "say", "text": str(raw["text"]).strip()[:120]}
+        if action == "move":
+            location = next((item for item in locations if item.get("id") == raw.get("location_id")), None)
+            if location is None and locations:
+                location = locations[0]
+            if location:
+                return {"action": "move", "to": {"x": location["x"], "y": location["y"], "name": location["name"]}}
+        return {"action": "idle"}

@@ -44,3 +44,10 @@ FastAPI 不再持有地图、房间、角色位置或 WebSocket 移动状态；`
 ## 前端 Agent 对话
 
 地图在出生点旁保留苏晚（`avatar_id=2`）和周博（`avatar_id=3`）两个静态居民。客户端统一解析静态居民和携带同步 `avatarId` 的在线玩家，在 64 像素范围内选择最近目标；B 打开自己的分身，E 或近距离点击打开目标分身。请求继续调用 `POST /api/agent/chat`，并按 `viewerAvatarId:targetAvatarId` 维持会话。
+
+## 离线分身自治（阶段 ⑤）
+
+- RPGJS 玩家上线/重连默认进入挂机模式；`G` 可切换，一旦收到方向移动输入立即由真人接管，断线后重连恢复默认挂机。
+- 挂机行为是事件驱动的：启用、抵达地点、两格内相遇时才调用 `/api/agent/step`，不进行定时 LLM 轮询。内置地点为广场、水井、树林、河边、集市。
+- 相遇双方空闲且 60 秒冷却结束后进行一轮两句交流；开场使用 step，另一分身用 `/api/agent/chat` 回应。同步的 `agentSpeech` 在同房间客户端显示气泡。
+- FastAPI `/api/agent/step` 接受位置、地点、附近分身、人设和上个动作，返回 `move`、`say` 或 `idle`。

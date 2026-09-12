@@ -60,9 +60,35 @@ class AgentChatResponse(BaseModel):
     response: str
 
 
+class AgentPosition(BaseModel):
+    x: float
+    y: float
+
+
+class AgentLocation(AgentPosition):
+    id: str
+    name: str
+
+
+class NearbyAvatar(BaseModel):
+    avatar_id: int
+    name: str
+    distance: float = Field(ge=0)
+
+
 class AgentStepRequest(BaseModel):
-    conversation_id: str
-    observation: dict[str, object] = Field(default_factory=dict)
+    avatar_id: int
+    position: AgentPosition
+    locations: list[AgentLocation] = Field(default_factory=list)
+    nearby: list[NearbyAvatar] = Field(default_factory=list)
+    persona: str | None = None
+    last_action: str | None = None
+
+
+class AgentStepResponse(BaseModel):
+    action: Literal["move", "say", "idle"]
+    to: dict[str, float | str] | None = None
+    text: str | None = None
 
 
 class AgentInitRequest(BaseModel):
@@ -264,9 +290,20 @@ async def agent_chat(payload: AgentChatRequest):
     )
 
 
-@app.post("/api/agent/step", response_model=AgentStubResponse, status_code=501)
+@app.post("/api/agent/step", response_model=AgentStepResponse)
 async def agent_step(payload: AgentStepRequest):
-    return AgentStubResponse(operation="step", message="Agent step loop is not implemented yet.")
+    try:
+        decision = await agent_runtime.step(
+            avatar_id=payload.avatar_id,
+            position=payload.position.model_dump(),
+            locations=[item.model_dump() for item in payload.locations],
+            nearby=[item.model_dump() for item in payload.nearby],
+            persona=payload.persona,
+            last_action=payload.last_action,
+        )
+    except AgentRuntimeError as error:
+        raise HTTPException(error.status_code, detail={"code": error.code, "message": error.message, "retryable": error.retryable}) from error
+    return AgentStepResponse(**decision)
 
 
 @app.post("/api/agent/init", response_model=AgentStubResponse, status_code=501)
