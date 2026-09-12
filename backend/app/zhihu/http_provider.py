@@ -18,6 +18,9 @@ from .models import (
     ZhidaInput,
     ZhidaResult,
     ZhihuSearchInput,
+    CollectionContentItem, CreatorStatsResult, FavlistItem, FolloweeItem, Paging,
+    UserCollectionsResult, UserContentItem, UserContentsResult,
+    UserFavlistsResult, UserFolloweesResult,
 )
 
 BASE_URL = "https://developer.zhihu.com"
@@ -26,6 +29,11 @@ ZHIHU_SEARCH_URL = f"{BASE_URL}/api/v1/content/zhihu_search"
 HOT_LIST_URL = f"{BASE_URL}/api/v1/content/hot_list"
 QUESTION_RECOMMENDATIONS_URL = f"{BASE_URL}/api/v1/user/question_recommendations"
 ZHIDA_URL = f"{BASE_URL}/v1/chat/completions"
+USER_CONTENTS_URL = f"{BASE_URL}/api/v1/user/contents"
+USER_FOLLOWEES_URL = f"{BASE_URL}/api/v1/user/followees"
+USER_COLLECTIONS_URL = f"{BASE_URL}/api/v1/user/collections"
+USER_FAVLISTS_URL = f"{BASE_URL}/api/v1/user/favlists"
+CREATOR_ACCOUNT_STATS_URL = f"{BASE_URL}/api/v1/user/creator_account_stats"
 
 
 class HttpZhihuProvider:
@@ -267,6 +275,51 @@ class HttpZhihuProvider:
             return ZhidaResult(answer=answer, model=model)
         except (AttributeError, KeyError, IndexError, TypeError) as error:
             raise ZhihuAPIError(502, "ZHIHU_INVALID_RESPONSE", "知乎直答返回了无法识别的数据。") from error
+
+    @staticmethod
+    def _value(item: dict[str, Any], key: str, default: Any = "") -> Any:
+        return item.get(key, item.get(key[:1].lower() + key[1:], default))
+
+    @classmethod
+    def _paging(cls, data: dict[str, Any]) -> Paging | None:
+        raw = data.get("Paging", data.get("paging"))
+        if not isinstance(raw, dict):
+            return None
+        return Paging(isEnd=bool(cls._value(raw, "IsEnd", True)), totals=cls._value(raw, "Totals", None), next=cls._value(raw, "Next", None))
+
+    @staticmethod
+    def _items(data: dict[str, Any], label: str) -> list[dict[str, Any]]:
+        raw = data.get("Items", data.get("items"))
+        if not isinstance(raw, list) or not all(isinstance(item, dict) for item in raw):
+            raise ZhihuAPIError(502, "ZHIHU_INVALID_RESPONSE", f"知乎{label}返回了无法识别的数据。")
+        return raw
+
+    async def user_contents(self, content_type: str = "all", limit: int = 20) -> UserContentsResult:
+        data = self._data(await self._request("GET", USER_CONTENTS_URL, params={"ContentType": content_type, "Limit": limit}))
+        items = [UserContentItem(title=str(self._value(i, "Title")), url=str(self._value(i, "Url")), contentType=str(self._value(i, "ContentType")), excerpt=str(self._value(i, "Excerpt", self._value(i, "ContentText"))), voteUpCount=int(self._value(i, "VoteUpCount", 0) or 0), commentCount=int(self._value(i, "CommentCount", 0) or 0)) for i in self._items(data, "用户内容")]
+        return UserContentsResult(items=items, paging=self._paging(data))
+
+    async def user_followees(self, limit: int = 20) -> UserFolloweesResult:
+        data = self._data(await self._request("GET", USER_FOLLOWEES_URL, params={"Limit": limit}))
+        items = [FolloweeItem(fullname=str(self._value(i, "Fullname")), urlToken=str(self._value(i, "UrlToken")), url=str(self._value(i, "Url")), avatarUrl=str(self._value(i, "AvatarUrl"))) for i in self._items(data, "用户关注")]
+        return UserFolloweesResult(items=items, paging=self._paging(data))
+
+    async def user_collections(self, limit: int = 20) -> UserCollectionsResult:
+        data = self._data(await self._request("GET", USER_COLLECTIONS_URL, params={"Limit": limit}))
+        items = [CollectionContentItem(title=str(self._value(i, "Title")), url=str(self._value(i, "Url")), contentType=str(self._value(i, "ContentType")), excerpt=str(self._value(i, "Excerpt", self._value(i, "ContentText")))) for i in self._items(data, "收藏内容")]
+        return UserCollectionsResult(items=items, paging=self._paging(data))
+
+    async def user_favlists(self, limit: int = 20) -> UserFavlistsResult:
+        data = self._data(await self._request("GET", USER_FAVLISTS_URL, params={"Limit": limit}))
+        items = [FavlistItem(urlToken=str(self._value(i, "UrlToken")), url=str(self._value(i, "Url")), title=str(self._value(i, "Title")), description=str(self._value(i, "Description")), isPublic=bool(self._value(i, "IsPublic", False))) for i in self._items(data, "收藏夹")]
+        return UserFavlistsResult(items=items, paging=self._paging(data))
+
+    async def creator_account_stats(self) -> CreatorStatsResult:
+        data = self._data(await self._request("GET", CREATOR_ACCOUNT_STATS_URL))
+        def mapping(key: str) -> dict[str, object]:
+            value = self._value(data, key, {})
+            return value if isinstance(value, dict) else {}
+        return CreatorStatsResult(metrics=mapping("Metrics"), audience=mapping("Audience"), creationCounts=mapping("CreationCounts"), followers=mapping("Followers"))
 
     async def close(self) -> None:
         return None

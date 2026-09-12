@@ -132,6 +132,15 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json()["detail"]["code"], "ZHIHU_NOT_CONFIGURED")
 
+    async def test_user_endpoints_require_server_configuration(self):
+        paths = ["contents", "followees", "collections", "favlists", "creator-stats"]
+        with patch.dict(os.environ, self.oauth_environment):
+            responses = [await self.client.get(f"/api/zhihu/user/{path}") for path in paths]
+        for response in responses:
+            self.assertEqual(response.status_code, 503)
+            self.assertEqual(response.json()["detail"]["code"], "ZHIHU_NOT_CONFIGURED")
+            self.assertIn("尚未配置", response.json()["detail"]["message"])
+
     async def test_hot_list_returns_normalized_items(self):
         result = {
             "total": 1,
