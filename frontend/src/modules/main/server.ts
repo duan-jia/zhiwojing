@@ -19,6 +19,17 @@ export default defineModule<RpgServer>({
         },
       },
       {
+        id: 'landmark-user-home',
+        x: 672,
+        y: 736,
+        event: {
+          onInit() {
+            this.name = '⌂ 知我居'
+            this.setGraphic('landmark-home')
+          },
+        },
+      },
+      {
         id: 'avatar-su-wan',
         x: 736,
         y: 800,

@@ -96,6 +96,70 @@ class HotListResult(BaseModel):
     items: list[HotListItem]
 
 
+class UserContentItem(BaseModel):
+    title: str = ""
+    url: str = ""
+    contentType: str = ""
+    excerpt: str = ""
+    voteUpCount: int = 0
+    commentCount: int = 0
+
+
+class FolloweeItem(BaseModel):
+    fullname: str = ""
+    urlToken: str = ""
+    url: str = ""
+    avatarUrl: str = ""
+
+
+class CollectionContentItem(BaseModel):
+    title: str = ""
+    url: str = ""
+    contentType: str = ""
+    excerpt: str = ""
+
+
+class FavlistItem(BaseModel):
+    urlToken: str = ""
+    url: str = ""
+    title: str = ""
+    description: str = ""
+    isPublic: bool = False
+
+
+class Paging(BaseModel):
+    isEnd: bool = True
+    totals: int | None = None
+    next: str | None = None
+
+
+class UserContentsResult(BaseModel):
+    items: list[UserContentItem]
+    paging: Paging | None = None
+
+
+class UserFolloweesResult(BaseModel):
+    items: list[FolloweeItem]
+    paging: Paging | None = None
+
+
+class UserCollectionsResult(BaseModel):
+    items: list[CollectionContentItem]
+    paging: Paging | None = None
+
+
+class UserFavlistsResult(BaseModel):
+    items: list[FavlistItem]
+    paging: Paging | None = None
+
+
+class CreatorStatsResult(BaseModel):
+    metrics: dict[str, object] = Field(default_factory=dict)
+    audience: dict[str, object] = Field(default_factory=dict)
+    creationCounts: dict[str, object] = Field(default_factory=dict)
+    followers: dict[str, object] = Field(default_factory=dict)
+
+
 class SearchItem(BaseModel):
     title: str
     contentType: str

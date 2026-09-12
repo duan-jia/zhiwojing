@@ -13,6 +13,7 @@ from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 from .agent import AgentRuntimeError, AvatarAgentRuntime
 from .zhihu import CapabilityError, ToolContext, build_tool_registry
+from .zhihu.http_provider import HttpZhihuProvider
 from .zhihu.models import (
     DraftInput,
     DraftProfile,
@@ -22,6 +23,11 @@ from .zhihu.models import (
     SearchResult,
     ZhidaInput,
     ZhidaResult,
+    CreatorStatsResult,
+    UserCollectionsResult,
+    UserContentsResult,
+    UserFavlistsResult,
+    UserFolloweesResult,
 )
 
 engine = create_engine("sqlite:///./avatar.db", connect_args={"check_same_thread": False})
@@ -185,6 +191,7 @@ def resolve_draft_profile(user_id: int) -> DraftProfile:
 
 
 tool_registry = build_tool_registry(profile_resolver=resolve_draft_profile)
+user_zhihu_provider = HttpZhihuProvider()
 agent_runtime = AvatarAgentRuntime(tool_registry)
 
 MOCK_AVATARS = (
@@ -341,6 +348,38 @@ async def global_search(
 @app.post("/api/zhihu/answer", response_model=ZhidaResult)
 async def zhihu_answer(payload: ZhidaInput):
     return await execute_tool("zhida", payload.model_dump())
+
+
+async def execute_user_request(call):
+    try:
+        return await call
+    except CapabilityError as error:
+        raise HTTPException(error.status_code, detail={"code": error.code, "message": error.message, "retryable": error.retryable}) from error
+
+
+@app.get("/api/zhihu/user/contents", response_model=UserContentsResult)
+async def zhihu_user_contents(content_type: Literal["all", "answer", "article", "zvideo", "pin", "question"] = "all", limit: int = Query(default=20, ge=1, le=50)):
+    return await execute_user_request(user_zhihu_provider.user_contents(content_type, limit))
+
+
+@app.get("/api/zhihu/user/followees", response_model=UserFolloweesResult)
+async def zhihu_user_followees(limit: int = Query(default=20, ge=1, le=50)):
+    return await execute_user_request(user_zhihu_provider.user_followees(limit))
+
+
+@app.get("/api/zhihu/user/collections", response_model=UserCollectionsResult)
+async def zhihu_user_collections(limit: int = Query(default=20, ge=1, le=50)):
+    return await execute_user_request(user_zhihu_provider.user_collections(limit))
+
+
+@app.get("/api/zhihu/user/favlists", response_model=UserFavlistsResult)
+async def zhihu_user_favlists(limit: int = Query(default=20, ge=1, le=50)):
+    return await execute_user_request(user_zhihu_provider.user_favlists(limit))
+
+
+@app.get("/api/zhihu/user/creator-stats", response_model=CreatorStatsResult)
+async def zhihu_creator_stats():
+    return await execute_user_request(user_zhihu_provider.creator_account_stats())
 
 
 @app.get("/api/oauth/status", response_model=OAuthStatusResponse)

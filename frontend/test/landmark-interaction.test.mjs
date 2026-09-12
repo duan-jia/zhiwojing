@@ -22,6 +22,9 @@ test('landmark registry exposes hot square close to the spawn', async () => {
   })
   assert.equal(landmarkForId('landmark-hot-square').kind, 'hot-square')
   assert.equal(landmarkForId('missing'), null)
+  assert.deepEqual(LANDMARKS[1], {
+    id: 'landmark-user-home', name: '知我居', x: 672, y: 736, kind: 'user-home'
+  })
 })
 
 test('landmark interaction and panel use the shared two-tile range', async () => {
@@ -39,7 +42,13 @@ test('landmark interaction and panel use the shared two-tile range', async () =>
   assert.match(panel, /target="_blank"/)
   assert.match(panel, /正在搬运知乎热榜/)
   assert.match(panel, /热榜加载失败/)
+  for (const label of ['我的内容', '我的关注', '我的收藏', '我的创作数据']) assert.match(panel, new RegExp(label))
+  assert.match(panel, /\/api\/zhihu\/user\/\$\{tab\}/)
+  assert.match(panel, /\/api\/zhihu\/user\/collections/)
+  assert.match(panel, /\/api\/zhihu\/user\/favlists/)
   assert.match(html, /id="landmark-root"/)
   assert.match(server, /id: 'landmark-hot-square'/)
   assert.match(server, /setGraphic\('landmark-hot'\)/)
+  assert.match(server, /id: 'landmark-user-home'/)
+  assert.match(server, /setGraphic\('landmark-home'\)/)
 })

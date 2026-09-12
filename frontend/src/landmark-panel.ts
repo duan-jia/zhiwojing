@@ -9,6 +9,8 @@ interface HotItem {
 
 interface HotResult { items: HotItem[] }
 interface PanelLifecycle { onOpen: () => void; onClose: () => void }
+type HomeTab = 'contents' | 'followees' | 'collections' | 'creator-stats'
+interface UserItem { title?: string; fullname?: string; description?: string; excerpt?: string; contentType?: string; url?: string; avatarUrl?: string; isPublic?: boolean }
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 let activeLandmark: LandmarkDefinition | null = null
@@ -68,6 +70,80 @@ async function loadHotList(version: number): Promise<void> {
   }
 }
 
+const HOME_TABS: readonly { id: HomeTab; label: string }[] = [
+  { id: 'contents', label: '我的内容' }, { id: 'followees', label: '我的关注' },
+  { id: 'collections', label: '我的收藏' }, { id: 'creator-stats', label: '我的创作数据' },
+]
+
+async function responseJson(path: string): Promise<Record<string, unknown>> {
+  const response = await fetch(`${API}${path}`, { credentials: 'include', signal: AbortSignal.timeout(10000) })
+  const body = await response.json().catch(() => ({})) as { detail?: { message?: string } }
+  if (!response.ok) throw new Error(body.detail?.message || `服务返回 ${response.status}`)
+  return body
+}
+
+function renderUserItems(items: UserItem[], empty: string): string {
+  if (!items.length) return `<p class="landmark-status">${escapeHtml(empty)}</p>`
+  return `<div class="home-list">${items.map(item => {
+    const label = item.title || item.fullname || '知乎条目'
+    const detail = item.description || item.excerpt || item.contentType || (item.isPublic === false ? '私密收藏夹' : '')
+    const href = item.url ? safeZhihuUrl(item.url) : null
+    const body = `${item.avatarUrl && safeZhihuUrl(item.avatarUrl) ? `<img src="${escapeHtml(item.avatarUrl)}" alt="">` : ''}<span><strong>${escapeHtml(label)}</strong>${detail ? `<small>${escapeHtml(detail)}</small>` : ''}</span>`
+    return href ? `<a class="home-item" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${body}</a>` : `<article class="home-item home-item--disabled">${body}</article>`
+  }).join('')}</div>`
+}
+
+function flattenStats(stats: Record<string, unknown>): string {
+  const entries = Object.entries(stats).flatMap(([group, values]) => values && typeof values === 'object'
+    ? Object.entries(values as Record<string, unknown>).map(([key, value]) => [key, value] as const)
+    : [[group, values] as const])
+  if (!entries.length) return '<p class="landmark-status">暂时没有创作数据。</p>'
+  return `<dl class="stats-grid">${entries.map(([key, value]) => `<div><dt>${escapeHtml(key)}</dt><dd>${escapeHtml(String(value ?? '—'))}</dd></div>`).join('')}</dl>`
+}
+
+async function loadHomeTab(tab: HomeTab, version: number): Promise<void> {
+  renderStatus('正在整理你的知乎空间…')
+  try {
+    let html: string
+    if (tab === 'collections') {
+      const [collections, favlists] = await Promise.all([responseJson('/api/zhihu/user/collections'), responseJson('/api/zhihu/user/favlists')])
+      html = `<h3>最近收藏</h3>${renderUserItems((collections.items as UserItem[]) || [], '暂时没有收藏内容。')}<h3>收藏夹</h3>${renderUserItems((favlists.items as UserItem[]) || [], '暂时没有收藏夹。')}`
+    } else {
+      const result = await responseJson(`/api/zhihu/user/${tab}`)
+      html = tab === 'creator-stats' ? flattenStats(result) : renderUserItems((result.items as UserItem[]) || [], tab === 'contents' ? '暂时没有发布内容。' : '暂时没有关注用户。')
+    }
+    if (version === requestVersion && activeLandmark?.kind === 'user-home') root()!.querySelector<HTMLElement>('.landmark-content')!.innerHTML = html
+  } catch (error) {
+    if (version !== requestVersion || activeLandmark?.kind !== 'user-home') return
+    renderStatus(error instanceof Error ? error.message : '加载失败，请稍后重试。', true)
+  }
+}
+
+function selectHomeTab(tab: HomeTab): void {
+  root()?.querySelectorAll<HTMLButtonElement>('.home-tab').forEach(button => {
+    const selected = button.dataset.tab === tab
+    button.classList.toggle('home-tab--active', selected)
+    button.setAttribute('aria-selected', String(selected))
+  })
+  void loadHomeTab(tab, ++requestVersion)
+}
+
+function renderHomeNavigation(): void {
+  const panel = root()?.querySelector<HTMLElement>('.landmark-panel')
+  if (!panel) return
+  panel.querySelector('.home-tabs')?.remove()
+  const nav = document.createElement('nav')
+  nav.className = 'home-tabs'
+  nav.setAttribute('role', 'tablist')
+  nav.innerHTML = HOME_TABS.map(tab => `<button type="button" class="home-tab" role="tab" data-tab="${tab.id}">${tab.label}</button>`).join('')
+  panel.querySelector('.landmark-content')?.before(nav)
+  nav.addEventListener('click', event => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('.home-tab')
+    if (button?.dataset.tab) selectHomeTab(button.dataset.tab as HomeTab)
+  })
+  selectHomeTab('contents')
+}
+
 function ensureShell(): HTMLElement | null {
   const panelRoot = root()
   if (!panelRoot || panelRoot.dataset.ready === 'true') return panelRoot
@@ -98,9 +174,13 @@ export function openLandmarkPanel(landmark: LandmarkDefinition): void {
   const wasOpen = isLandmarkPanelOpen()
   activeLandmark = landmark
   panelRoot.querySelector<HTMLElement>('#landmark-title')!.textContent = landmark.name
+  panelRoot.querySelector<HTMLElement>('.landmark-icon')!.textContent = landmark.kind === 'user-home' ? '居' : '榜'
+  panelRoot.querySelector<HTMLElement>('.landmark-header p')!.textContent = landmark.kind === 'user-home' ? '看见你的内容、关注、收藏与创作成长' : '发现此刻值得关注的知乎讨论'
+  panelRoot.querySelector('.home-tabs')?.remove()
   panelRoot.hidden = false
   if (!wasOpen) lifecycle.onOpen()
   const version = ++requestVersion
   if (landmark.kind === 'hot-square') void loadHotList(version)
+  if (landmark.kind === 'user-home') renderHomeNavigation()
   panelRoot.querySelector<HTMLButtonElement>('.landmark-close')?.focus()
 }
