@@ -2,7 +2,9 @@ import { provideClientGlobalConfig, provideClientModules, Presets } from "@rpgjs
 import { provideMain } from "../modules/main";
 import { provideTiledMap } from "@rpgjs/tiledmap/client";
 import { setupDialogueInteractions } from '../dialogue-interactions'
+import { setupAgentBubbles } from '../agent-bubbles'
 
+let bubbleController: ReturnType<typeof setupAgentBubbles> | null = null
 let dialogueController: ReturnType<typeof setupDialogueInteractions> | null = null
 
 export default {
@@ -17,6 +19,7 @@ export default {
         left: ['left', 'a'],
         right: ['right', 'd'],
         action: ['space', 'enter'],
+        agentToggle: ['g'],
       },
     }),
     provideMain(),
@@ -25,9 +28,11 @@ export default {
         engine: {
           onStart(engine) {
             dialogueController = setupDialogueInteractions(engine)
+            bubbleController = setupAgentBubbles(engine)
           },
           onStep() {
             dialogueController?.step()
+            bubbleController?.step()
           },
         },
         spritesheets: [

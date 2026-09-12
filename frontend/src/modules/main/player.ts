@@ -3,6 +3,7 @@ import type {
     RpgPlayerConnectionContext,
     RpgPlayerHooks,
 } from '@rpgjs/server'
+import { enableAgent, takeControl, toggleAgent } from './autonomy'
 
 const profiles = {
     1: { name: '体验用户', graphic: 'hero' },
@@ -19,6 +20,8 @@ function avatarIdFromContext(context: RpgPlayerConnectionContext): 1 | 2 | 3 {
 
 export const player: RpgPlayerHooks = {
     props: {
+        agentMode: { $default: true, $syncWithClient: true, $permanent: false },
+        agentSpeech: { $default: '', $syncWithClient: true, $permanent: false },
         avatarId: {
             $default: 1,
             $syncWithClient: true,
@@ -29,6 +32,12 @@ export const player: RpgPlayerHooks = {
         player.name = '体验用户'
         player.setGraphic('hero')
         await player.changeMap('nature-open-world', 'start')
+        enableAgent(player as any)
+    },
+    onInput(player: RpgPlayer, data: any) {
+        const input = String(data?.input ?? data?.action ?? '')
+        if (input === 'agentToggle') toggleAgent(player as any)
+        else if (['up', 'down', 'left', 'right'].includes(input) || data?.direction) takeControl(player as any)
     },
     onAccepted(player: RpgPlayer, context: RpgPlayerConnectionContext) {
         const avatarId = avatarIdFromContext(context)
