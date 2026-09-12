@@ -184,9 +184,9 @@ class AvatarAgentRuntime:
                 break
         if self.memory_service:
             try:
-                if conversation_id.startswith("meeting:"):
+                if user_id != avatar_id:
                     await self.memory_service.conclude_pair(create_llm(), a=user_id, b=avatar_id, conversation_id=conversation_id, user_message=message, reply=response)
-                elif user_id == avatar_id:
+                else:
                     await self.memory_service.record_owner_turn(create_llm(), avatar_id=avatar_id, conversation_id=conversation_id, user_message=message, reply=response)
             except Exception:
                 import logging

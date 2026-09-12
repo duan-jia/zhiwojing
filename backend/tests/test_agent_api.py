@@ -181,6 +181,21 @@ class AgentToolBoundaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("generate_draft", names)
         self.assertNotIn("zhida", names)
 
+    async def test_visitor_chat_without_meeting_prefix_concludes_pair(self):
+        memory_service = type(
+            "MemoryService",
+            (),
+            {"context_for_chat": lambda *args: "", "conclude_pair": AsyncMock(), "record_owner_turn": AsyncMock()},
+        )()
+        runtime = AvatarAgentRuntime(object(), memory_service=memory_service)
+        with patch("app.agent.create_llm", return_value=object()), patch(
+            "app.agent.registry_tools", return_value=[]
+        ), patch("app.agent.create_react_agent", return_value=FakeGraph()):
+            await runtime.chat(user_id=1, avatar_id=2, conversation_id="1:2", message="你好", name="苏晚", bio="", interests="", style="")
+        memory_service.conclude_pair.assert_awaited_once()
+        self.assertEqual(memory_service.conclude_pair.await_args.kwargs["conversation_id"], "1:2")
+        memory_service.record_owner_turn.assert_not_awaited()
+
 
 if __name__ == "__main__":
     unittest.main()
