@@ -32,12 +32,10 @@ export const player: RpgPlayerHooks = {
         player.name = '体验用户'
         player.setGraphic('hero')
         await player.changeMap('nature-open-world', 'start')
+        const actionPlayer = player as RpgPlayer & { on(event: string, callback: () => void): void }
+        actionPlayer.on('agentToggle', () => toggleAgent(player as any))
+        actionPlayer.on('takeControl', () => takeControl(player as any))
         enableAgent(player as any)
-    },
-    onInput(player: RpgPlayer, data: any) {
-        const input = String(data?.input ?? data?.action ?? '')
-        if (input === 'agentToggle') toggleAgent(player as any)
-        else if (['up', 'down', 'left', 'right'].includes(input) || data?.direction) takeControl(player as any)
     },
     onAccepted(player: RpgPlayer, context: RpgPlayerConnectionContext) {
         const avatarId = avatarIdFromContext(context)

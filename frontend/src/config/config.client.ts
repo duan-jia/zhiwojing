@@ -3,9 +3,11 @@ import { provideMain } from "../modules/main";
 import { provideTiledMap } from "@rpgjs/tiledmap/client";
 import { setupDialogueInteractions } from '../dialogue-interactions'
 import { setupAgentBubbles } from '../agent-bubbles'
+import { setupAutonomyInput } from '../autonomy-input'
 
 let bubbleController: ReturnType<typeof setupAgentBubbles> | null = null
 let dialogueController: ReturnType<typeof setupDialogueInteractions> | null = null
+let autonomyInputController: ReturnType<typeof setupAutonomyInput> | null = null
 
 export default {
   providers: [
@@ -27,6 +29,8 @@ export default {
       {
         engine: {
           onStart(engine) {
+            autonomyInputController?.destroy()
+            autonomyInputController = setupAutonomyInput(engine)
             dialogueController = setupDialogueInteractions(engine)
             bubbleController = setupAgentBubbles(engine)
           },
