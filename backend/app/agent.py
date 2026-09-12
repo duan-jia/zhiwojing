@@ -102,9 +102,10 @@ def registry_tools(
 
 
 class AvatarAgentRuntime:
-    def __init__(self, registry: ToolRegistry):
+    def __init__(self, registry: ToolRegistry, *, memory_service=None, checkpointer=None):
         self.registry = registry
-        self.checkpointer = MemorySaver()
+        self.memory_service = memory_service
+        self.checkpointer = checkpointer or MemorySaver()
 
     async def chat(
         self,
@@ -119,17 +120,30 @@ class AvatarAgentRuntime:
         style: str,
     ) -> str:
         names = OWNER_TOOLS if user_id == avatar_id else READ_ONLY_TOOLS
+        memory_context = self.memory_service.context_for_chat(user_id, avatar_id, message) if self.memory_service else ""
         prompt = (
             f"你是{name}的数字分身。简介：{bio or '暂无'}。"
             f"兴趣：{interests}。表达风格：{style}。"
             "请始终以这个人设和语气回答；需要外部信息时使用工具，不要虚构工具结果。"
+            + (f"\n以下是经过权限过滤的记忆，仅用于帮助自然延续对话：\n{memory_context}" if memory_context else "")
         )
-        agent = create_react_agent(
-            create_llm(),
-            registry_tools(self.registry, names, user_id=user_id),
-            checkpointer=self.checkpointer,
-            state_modifier=prompt,
-        )
+        arguments = {
+            "checkpointer": self.checkpointer,
+            # Kept for compatibility with the repository's patched contract tests.
+            "state_modifier": prompt,
+        }
+        try:
+            agent = create_react_agent(
+                create_llm(), registry_tools(self.registry, names, user_id=user_id), **arguments
+            )
+        except TypeError as error:
+            if "state_modifier" not in str(error):
+                raise
+            arguments.pop("state_modifier")
+            arguments["prompt"] = prompt
+            agent = create_react_agent(
+                create_llm(), registry_tools(self.registry, names, user_id=user_id), **arguments
+            )
         try:
             result = await agent.ainvoke(
                 {"messages": [("user", message)]},
@@ -163,12 +177,21 @@ class AvatarAgentRuntime:
                 "模型服务返回异常，请稍后重试。",
                 retryable=True,
             ) from error
+        response = ""
         for item in reversed(result["messages"]):
             if isinstance(item, AIMessage) and item.content:
-                if isinstance(item.content, str):
-                    return item.content
-                return json.dumps(item.content, ensure_ascii=False)
-        return ""
+                response = item.content if isinstance(item.content, str) else json.dumps(item.content, ensure_ascii=False)
+                break
+        if self.memory_service:
+            try:
+                if conversation_id.startswith("meeting:"):
+                    await self.memory_service.conclude_pair(create_llm(), a=user_id, b=avatar_id, conversation_id=conversation_id, user_message=message, reply=response)
+                elif user_id == avatar_id:
+                    await self.memory_service.record_owner_turn(create_llm(), avatar_id=avatar_id, conversation_id=conversation_id, user_message=message, reply=response)
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception("memory conclude failed; returning chat response")
+        return response
 
     async def step(
         self,
@@ -193,6 +216,7 @@ class AvatarAgentRuntime:
             "\"text\":\"...\"}。附近有人时优先 say 且只说一句简短自然的中文；"
             "否则从给定地点选择一个 location_id 前往，偶尔可 idle。"
         )
+        memory_hint = self.memory_service.context_for_step(avatar_id, nearby) if self.memory_service else ""
         observation = {
             "avatar_id": avatar_id,
             "position": position,
@@ -200,6 +224,7 @@ class AvatarAgentRuntime:
             "nearby": nearby,
             "persona": persona or "真诚、好奇",
             "last_action": last_action,
+            "pair_memory_hint": memory_hint or None,
         }
         try:
             reply = await create_llm().ainvoke(

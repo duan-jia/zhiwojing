@@ -1,4 +1,6 @@
 import os
+import logging
+import sqlite3
 import re
 from datetime import datetime, timezone
 from ipaddress import ip_address
@@ -12,6 +14,7 @@ from pydantic import BaseModel, ValidationError
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 from .agent import AgentRuntimeError, AvatarAgentRuntime
+from .memory import MemoryConfig, MemoryService, StructuredStore, build_mem0
 from .zhihu import CapabilityError, ToolContext, build_tool_registry
 from .zhihu.http_provider import HttpZhihuProvider
 from .zhihu.models import (
@@ -218,7 +221,23 @@ def resolve_draft_profile(user_id: int) -> DraftProfile:
 
 tool_registry = build_tool_registry(profile_resolver=resolve_draft_profile)
 user_zhihu_provider = HttpZhihuProvider()
-agent_runtime = AvatarAgentRuntime(tool_registry)
+
+def _build_agent_runtime():
+    try:
+        config = MemoryConfig.from_env()
+        if not config.enabled:
+            return AvatarAgentRuntime(tool_registry)
+        config.data_dir.mkdir(parents=True, exist_ok=True)
+        backend = build_mem0(config)
+        service = MemoryService(backend, StructuredStore(engine))
+        from langgraph.checkpoint.sqlite import SqliteSaver
+        connection = sqlite3.connect(config.data_dir / "checkpoints.sqlite", check_same_thread=False)
+        return AvatarAgentRuntime(tool_registry, memory_service=service, checkpointer=SqliteSaver(connection))
+    except Exception:
+        logging.getLogger(__name__).exception("memory initialization failed; continuing without memory")
+        return AvatarAgentRuntime(tool_registry)
+
+agent_runtime = _build_agent_runtime()
 
 MOCK_AVATARS = (
     {"zhihu_id": "mock-user", "name": "体验用户", "bio": "AI 产品经理", "interests": "科技、生活、创造", "style": "清晰、真诚、有条理"},

@@ -51,3 +51,7 @@ FastAPI 不再持有地图、房间、角色位置或 WebSocket 移动状态；`
 - 挂机行为是事件驱动的：启用、抵达地点、两格内相遇时才调用 `/api/agent/step`，不进行定时 LLM 轮询。内置地点为广场、水井、树林、河边、集市。
 - 相遇双方空闲且 60 秒冷却结束后进行一轮两句交流；开场使用 step，另一分身用 `/api/agent/chat` 回应。同步的 `agentSpeech` 在同房间客户端显示气泡。
 - FastAPI `/api/agent/step` 接受位置、地点、附近分身、人设和上个动作，返回 `move`、`say` 或 `idle`。
+
+## 两级长期记忆
+
+FastAPI 已接入可关闭、可降级的 Mem0 长期记忆：主人私有 `avatar:{id}` 与双方共享 `pair:{min}-{max}` 严格隔离；meeting 会话逐轮总结，主人会话每 6 条消息提取事实/偏好/待办。关系、episode 与 profile 同步落入 avatar.db，LangGraph checkpoint 改为 `MEMORY_DATA_DIR` 下的 SQLite。详见 [MEMORY.md](./MEMORY.md)。
