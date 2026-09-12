@@ -8,6 +8,17 @@ export default defineModule<RpgServer>({
     id: 'nature-open-world',
     events: [
       {
+        id: 'landmark-hot-square',
+        x: 800,
+        y: 736,
+        event: {
+          onInit() {
+            this.name = '◆ 热榜广场'
+            this.setGraphic('landmark-hot')
+          },
+        },
+      },
+      {
         id: 'avatar-su-wan',
         x: 736,
         y: 800,

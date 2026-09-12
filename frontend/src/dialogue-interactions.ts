@@ -14,6 +14,18 @@ import {
   findNearestDialogueTarget,
   type DialogueTarget,
 } from './dialogue-target'
+import {
+  closeLandmarkPanel,
+  configureLandmarkLifecycle,
+  isLandmarkPanelOpen,
+  openLandmarkPanel,
+} from './landmark-panel'
+import {
+  LANDMARK_RANGE,
+  findNearestLandmark,
+  landmarkTargetForSprite,
+  type LandmarkTarget,
+} from './landmark-target'
 
 interface DialogueController {
   step: () => void
@@ -44,6 +56,16 @@ function nearestTarget(engine: RpgClientEngine): DialogueTarget | null {
   )
 }
 
+function nearestLandmark(engine: RpgClientEngine): LandmarkTarget | null {
+  return findNearestLandmark(engine.getCurrentPlayer(), roomObjects(engine), LANDMARK_RANGE)
+}
+
+function distanceFromPlayer(engine: RpgClientEngine, target: { x: number; y: number }): number {
+  const player = engine.getCurrentPlayer() as { x?: number | (() => number); y?: number | (() => number) }
+  const read = (value: number | (() => number) | undefined) => Number(typeof value === 'function' ? value() : value) || 0
+  return Math.hypot(read(player?.x) - target.x, read(player?.y) - target.y)
+}
+
 function targetIsNearby(engine: RpgClientEngine, sprite: unknown): DialogueTarget | null {
   const target = dialogueTargetForSprite(sprite)
   if (!target) return null
@@ -57,6 +79,7 @@ function targetIsNearby(engine: RpgClientEngine, sprite: unknown): DialogueTarge
 export function setupDialogueInteractions(engine: RpgClientEngine): DialogueController {
   const hud = document.querySelector<HTMLElement>('#interaction-hud')
   let currentTarget: DialogueTarget | null = null
+  let currentLandmark: LandmarkTarget | null = null
   let lastScanAt = 0
   let toastTimer: ReturnType<typeof window.setTimeout> | null = null
 
@@ -81,15 +104,20 @@ export function setupDialogueInteractions(engine: RpgClientEngine): DialogueCont
     if (!hud) return
     if (toastTimer !== null) return
     hud.classList.remove('interaction-hud--status')
-    if (isChatOpen() || !currentTarget) {
+    if (isChatOpen() || isLandmarkPanelOpen() || (!currentTarget && !currentLandmark)) {
       hud.hidden = true
       return
     }
-    showHud(`按 E 与 ${currentTarget.displayName} 的分身对话`)
+    if (currentLandmark && (!currentTarget || distanceFromPlayer(engine, currentLandmark) <= distanceFromPlayer(engine, currentTarget))) {
+      showHud(`按 E 探索 ${currentLandmark.name}`)
+    } else if (currentTarget) {
+      showHud(`按 E 与 ${currentTarget.displayName} 的分身对话`)
+    }
   }
 
   const scan = () => {
     currentTarget = nearestTarget(engine)
+    currentLandmark = nearestLandmark(engine)
     updateHud()
   }
 
@@ -104,6 +132,7 @@ export function setupDialogueInteractions(engine: RpgClientEngine): DialogueCont
   configureChatLifecycle({
     onOpen: () => {
       clearToast()
+      if (isLandmarkPanelOpen()) closeLandmarkPanel()
       engine.interruptCurrentPlayerMovement()
       engine.stopProcessingInput = true
       updateHud()
@@ -113,6 +142,32 @@ export function setupDialogueInteractions(engine: RpgClientEngine): DialogueCont
       scan()
     },
   })
+
+  configureLandmarkLifecycle({
+    onOpen: () => {
+      clearToast()
+      if (isChatOpen()) closeAvatarChat()
+      engine.interruptCurrentPlayerMovement()
+      engine.stopProcessingInput = true
+      updateHud()
+    },
+    onClose: () => {
+      engine.stopProcessingInput = false
+      scan()
+    },
+  })
+
+  engine.interactions.use(
+    ({ sprite }: { sprite: unknown }) => landmarkTargetForSprite(sprite) !== null,
+    {
+      cursor: ({ sprite }: { sprite: unknown }) => findNearestLandmark(engine.getCurrentPlayer(), [sprite]) ? 'pointer' : undefined,
+      click: ({ sprite }: { sprite: unknown }) => {
+        const landmark = findNearestLandmark(engine.getCurrentPlayer(), [sprite])
+        if (landmark) openLandmarkPanel(landmark)
+        else showHud('请靠近到两格内再探索', true)
+      },
+    },
+  )
 
   engine.interactions.use(
     ({ sprite }: { sprite: unknown }) => {
@@ -139,12 +194,18 @@ export function setupDialogueInteractions(engine: RpgClientEngine): DialogueCont
     if (key === 'e') {
       event.preventDefault()
       currentTarget = nearestTarget(engine)
-      openTarget(currentTarget, '附近没有可对话的人')
+      currentLandmark = nearestLandmark(engine)
+      if (currentLandmark && (!currentTarget || distanceFromPlayer(engine, currentLandmark) <= distanceFromPlayer(engine, currentTarget))) {
+        openLandmarkPanel(currentLandmark)
+      } else {
+        openTarget(currentTarget, '附近没有可互动的人或地标')
+      }
       return
     }
-    if (event.key === 'Escape' && isChatOpen()) {
+    if (event.key === 'Escape' && (isChatOpen() || isLandmarkPanelOpen())) {
       event.preventDefault()
-      closeAvatarChat()
+      if (isChatOpen()) closeAvatarChat()
+      if (isLandmarkPanelOpen()) closeLandmarkPanel()
     }
   })
 

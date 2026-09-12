@@ -32,6 +32,11 @@ export default {
         },
         spritesheets: [
           {
+            id: 'landmark-hot',
+            image: 'spritesheets/landmark-hot.svg',
+            ...Presets.RMSpritesheet(3, 4)
+          },
+          {
             id: 'hero',
             image: 'spritesheets/hero.png',
             ...Presets.RMSpritesheet(3, 4)

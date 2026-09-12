@@ -9,7 +9,7 @@
     "test": "npm run test:world && npm run test:login && npm run test:interaction && npm run test:chat && npm run test:production",
     "test:world": "node --test test/world-layout.test.mjs",
     "test:login": "node --test test/login-shell.test.mjs",
-    "test:interaction": "node --test test/dialogue-interaction.test.mjs",
+    "test:interaction": "node --test test/dialogue-interaction.test.mjs test/landmark-interaction.test.mjs",
     "test:chat": "node --test test/agent-chat.test.mjs",
     "test:production": "node --test test/production-preview.test.mjs",
     "server": "node dist/server/node-server.js"
