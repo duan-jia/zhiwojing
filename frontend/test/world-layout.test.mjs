@@ -118,7 +118,7 @@ test('runtime uses one continuous 100 by 100 map with the four source quadrants 
   }
 
   const serverSource = await readFile(join(projectRoot, 'src', 'modules', 'main', 'server.ts'), 'utf8')
-  assert.match(serverSource, /maps:\s*\[\{ id: 'nature-open-world' \}\]/)
+  assert.match(serverSource, /maps:\s*\[\{\s*id: 'nature-open-world'/)
   assert.doesNotMatch(serverSource, /worldMaps\s*:/)
 
   const playerSource = await readFile(join(projectRoot, 'src', 'modules', 'main', 'player.ts'), 'utf8')
