@@ -10,6 +10,9 @@ from .models import (
     ZhidaInput,
     ZhidaResult,
     ZhihuSearchInput,
+    UserContentsInput, UserContentsResult, UserFolloweesInput, UserFolloweesResult,
+    UserCollectionsInput, UserCollectionsResult, UserFavlistsInput, UserFavlistsResult,
+    CreatorAccountStatsInput, CreatorStatsResult,
 )
 
 
@@ -32,3 +35,11 @@ class QuestionRecommendationsProvider(Protocol):
         self,
         payload: QuestionRecommendationsInput,
     ) -> QuestionRecommendationsResult: ...
+
+
+class UserProvider(Protocol):
+    async def user_contents(self, content_type: str = "all", limit: int = 20) -> UserContentsResult: ...
+    async def user_followees(self, limit: int = 20) -> UserFolloweesResult: ...
+    async def user_collections(self, limit: int = 20) -> UserCollectionsResult: ...
+    async def user_favlists(self, limit: int = 20) -> UserFavlistsResult: ...
+    async def creator_account_stats(self) -> CreatorStatsResult: ...

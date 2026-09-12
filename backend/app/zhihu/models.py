@@ -32,6 +32,27 @@ class HotListInput(BaseModel):
     limit: int = Field(default=10, ge=1, le=30)
 
 
+class UserContentsInput(BaseModel):
+    content_type: str = Field(default="all", min_length=1)
+    limit: int = Field(default=20, ge=1, le=50)
+
+
+class UserFolloweesInput(BaseModel):
+    limit: int = Field(default=20, ge=1, le=50)
+
+
+class UserCollectionsInput(BaseModel):
+    limit: int = Field(default=20, ge=1, le=50)
+
+
+class UserFavlistsInput(BaseModel):
+    limit: int = Field(default=20, ge=1, le=50)
+
+
+class CreatorAccountStatsInput(BaseModel):
+    pass
+
+
 class ZhihuSearchInput(BaseModel):
     query: str = Field(min_length=2, max_length=100)
     count: int = Field(default=10, ge=1, le=10)

@@ -14,10 +14,12 @@ from .models import (
     GlobalSearchInput,
     HotListInput,
     QuestionRecommendationsInput,
+    UserContentsInput, UserFolloweesInput, UserCollectionsInput, UserFavlistsInput,
+    CreatorAccountStatsInput,
     ZhidaInput,
     ZhihuSearchInput,
 )
-from .provider import QuestionRecommendationsProvider, ZhihuProvider
+from .provider import QuestionRecommendationsProvider, UserProvider, ZhihuProvider
 
 ProfileResolver = Callable[[int], DraftProfile]
 ToolHandler = Callable[[BaseModel, "ToolContext"], Awaitable[BaseModel]]
@@ -53,11 +55,13 @@ class ToolRegistry:
         *,
         recommendations_provider: QuestionRecommendationsProvider,
         draft_provider: DraftProvider,
+        user_provider: UserProvider,
         profile_resolver: ProfileResolver | None = None,
     ):
         self.public_provider = public_provider
         self.recommendations_provider = recommendations_provider
         self.draft_provider = draft_provider
+        self.user_provider = user_provider
         self.profile_resolver = profile_resolver
         self._tools = {
             "question_recommendations": ToolDefinition(
@@ -101,6 +105,26 @@ class ToolRegistry:
                 DraftInput,
                 "user_context",
                 self._generate_draft,
+            ),
+            "user_contents": ToolDefinition(
+                "user_contents", "查看当前用户最近发布的知乎内容。", UserContentsInput,
+                "user_context/personal", lambda payload, context: user_provider.user_contents(payload.content_type, payload.limit),
+            ),
+            "user_followees": ToolDefinition(
+                "user_followees", "查看当前用户在知乎关注了谁。", UserFolloweesInput,
+                "user_context/personal", lambda payload, context: user_provider.user_followees(payload.limit),
+            ),
+            "user_collections": ToolDefinition(
+                "user_collections", "查看当前用户收藏的知乎内容。", UserCollectionsInput,
+                "user_context/personal", lambda payload, context: user_provider.user_collections(payload.limit),
+            ),
+            "user_favlists": ToolDefinition(
+                "user_favlists", "查看当前用户创建或关注的知乎收藏夹。", UserFavlistsInput,
+                "user_context/personal", lambda payload, context: user_provider.user_favlists(payload.limit),
+            ),
+            "creator_account_stats": ToolDefinition(
+                "creator_account_stats", "查看当前用户的知乎创作数据和账号统计。", CreatorAccountStatsInput,
+                "user_context/personal", lambda payload, context: user_provider.creator_account_stats(),
             ),
         }
 
@@ -149,7 +173,7 @@ class ToolRegistry:
         return await tool.handler(payload, context or ToolContext())
 
     async def close(self) -> None:
-        providers = [self.public_provider, self.recommendations_provider]
+        providers = [self.public_provider, self.recommendations_provider, self.user_provider]
         seen: set[int] = set()
         for provider in providers:
             if id(provider) in seen:
@@ -165,6 +189,7 @@ def build_tool_registry(
     *,
     profile_resolver: ProfileResolver | None = None,
     draft_provider: DraftProvider | None = None,
+    user_provider: UserProvider | None = None,
 ) -> ToolRegistry:
     selected = (provider_name or os.getenv("ZHIHU_PUBLIC_PROVIDER", "http")).strip().lower()
     http_provider = HttpZhihuProvider()
@@ -178,5 +203,6 @@ def build_tool_registry(
         public_provider,
         recommendations_provider=http_provider,
         draft_provider=draft_provider or LocalTemplateDraftProvider(),
+        user_provider=user_provider or http_provider,
         profile_resolver=profile_resolver,
     )
