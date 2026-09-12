@@ -23,6 +23,9 @@ FastAPI 不再持有地图、房间、角色位置或 WebSocket 移动状态；`
 - RPGJS 服务端权威 MMORPG 多人同步。
 - 知乎公共内容、草稿、OAuth 预留 REST 能力保持不变。
 - `POST /api/agent/chat` 已实现整段响应的 Agent Loop：自己的分身可用 6 个工具（含 `generate_draft`/`zhida`），访问别人的分身只可用 4 个只读工具。
+- 登录页可选择 3 个本地 Mock 身份并通过 RPGJS 同步给其他客户端；按 B 与自己的分身对话，靠近两格内的在线玩家或静态居民后通过 E/点击与对方分身对话。
+- 对话复用一个本地面板并按分身保留页面内历史；打开面板会停止本地移动，但世界继续运行。Mock `avatar_id` 由客户端提供，只适用于本地 Demo，不能作为生产权限边界。
+- Agent 默认使用 OpenAI 兼容地址 `https://api.openai-next.com/v1` 和模型 `deepseek-v4-flash`。本地密钥通过 `backend/scripts/configure-local-llm.sh` 保存到仓库外的用户配置目录，并由 `run-local.sh` 在启动时读取；生产环境仍由部署平台注入 Secret。
 - `POST /api/agent/init` 与 `/api/agent/step` 仍为 HTTP 501 契约占位。
 - 默认数据库初始化体验用户、苏晚、周博 3 个不同兴趣和表达风格的 mock 分身。
 
@@ -37,10 +40,7 @@ FastAPI 不再持有地图、房间、角色位置或 WebSocket 移动状态；`
 ## 后续安全工作
 
 原 FastAPI 世界层的移动限速、断线清理与空房间 TTL 不再适用。上线前需在 RPGJS 权威侧重新实现并验证限速、防会话接管/身份绑定、断线回收与房间 TTL；这些加固不属于本次迁移范围。
-# Frontend Agent chat
 
-The RPGJS client now places two clickable avatar characters, 苏晚 (`avatar_id=2`)
-and 周博 (`avatar_id=3`), beside the starting point. Clicking either character
-opens the pixel-style Agent chat overlay. The client calls `POST /api/agent/chat`,
-keeps an independent `conversation_id` and message history for each avatar, and
-shows an actionable in-panel error when the API is unavailable.
+## 前端 Agent 对话
+
+地图在出生点旁保留苏晚（`avatar_id=2`）和周博（`avatar_id=3`）两个静态居民。客户端统一解析静态居民和携带同步 `avatarId` 的在线玩家，在 64 像素范围内选择最近目标；B 打开自己的分身，E 或近距离点击打开目标分身。请求继续调用 `POST /api/agent/chat`，并按 `viewerAvatarId:targetAvatarId` 维持会话。

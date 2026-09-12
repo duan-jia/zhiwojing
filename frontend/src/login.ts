@@ -3,16 +3,28 @@ interface OAuthStatus {
   integrationReady: boolean
 }
 
+import {
+  MOCK_IDENTITIES,
+  type MockIdentity,
+  identityForId,
+  persistIdentity,
+  readStoredIdentity,
+  setActiveIdentity,
+} from './identity'
+
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
-export function showLogin(): Promise<void> {
+export function showLogin(): Promise<MockIdentity> {
   const root = document.querySelector<HTMLElement>('#login-root')
   const game = document.querySelector<HTMLElement>('#rpg')
   const controls = document.querySelector<HTMLElement>('.controls-hint')
 
   if (!root || !game) {
-    return Promise.resolve()
+    return Promise.resolve(readStoredIdentity(window.localStorage))
   }
+
+  let selectedIdentity = readStoredIdentity(window.localStorage)
+  setActiveIdentity(selectedIdentity)
 
   root.innerHTML = `
     <main class="login-screen">
@@ -24,8 +36,24 @@ export function showLogin(): Promise<void> {
           <p class="login-eyebrow">ZHIHU PIXEL WORLD · CHAPTER 01</p>
           <h1 id="login-title">去世界走走，<br><em>挖掘新的灵感。</em></h1>
           <p class="login-intro">进入这片开放世界，先从自由行走和探索开始。</p>
+          <fieldset class="identity-picker">
+            <legend>选择本地体验身份</legend>
+            <div class="identity-options">
+              ${MOCK_IDENTITIES.map(identity => `
+                <button
+                  type="button"
+                  class="identity-option"
+                  data-avatar-id="${identity.id}"
+                  aria-pressed="${identity.id === selectedIdentity.id}"
+                >
+                  <strong>${identity.name}</strong>
+                  <small>${identity.tagline}</small>
+                </button>
+              `).join('')}
+            </div>
+          </fieldset>
           <div class="login-actions">
-            <button type="button" class="enter-game-button"><span>▶</span> 游客身份进入</button>
+            <button type="button" class="enter-game-button"><span>▶</span> 以 ${selectedIdentity.name} 进入</button>
             <button type="button" class="oauth-login-button" disabled>
               <span class="oauth-icon">知</span>
               <span><strong>正在读取登录状态…</strong><small>知乎 OAuth</small></span>
@@ -48,6 +76,28 @@ export function showLogin(): Promise<void> {
   const oauthLabel = oauthButton?.querySelector<HTMLElement>('strong')
   const oauthDetail = oauthButton?.querySelector<HTMLElement>('small')
   const status = root.querySelector<HTMLElement>('.login-status')
+  const identityButtons = [...root.querySelectorAll<HTMLButtonElement>('.identity-option')]
+
+  const renderSelectedIdentity = () => {
+    identityButtons.forEach(button => {
+      button.setAttribute(
+        'aria-pressed',
+        String(Number(button.dataset.avatarId) === selectedIdentity.id),
+      )
+    })
+    if (guestButton) {
+      guestButton.innerHTML = `<span>▶</span> 以 ${selectedIdentity.name} 进入`
+    }
+  }
+
+  identityButtons.forEach(button => {
+    button.addEventListener('click', () => {
+      const identity = identityForId(button.dataset.avatarId)
+      if (!identity) return
+      selectedIdentity = identity
+      renderSelectedIdentity()
+    })
+  })
 
   void fetch(`${API}/api/oauth/status`, {
     credentials: 'include',
@@ -82,10 +132,11 @@ export function showLogin(): Promise<void> {
 
   return new Promise(resolve => {
     guestButton?.addEventListener('click', () => {
+      persistIdentity(selectedIdentity, window.localStorage)
       game.hidden = false
       if (controls) controls.hidden = false
       root.remove()
-      resolve()
+      resolve(selectedIdentity)
     }, { once: true })
   })
 }

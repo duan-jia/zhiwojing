@@ -1,7 +1,9 @@
 import { provideClientGlobalConfig, provideClientModules, Presets } from "@rpgjs/client";
 import { provideMain } from "../modules/main";
 import { provideTiledMap } from "@rpgjs/tiledmap/client";
-import { avatarIdForSprite, openAvatarChat } from '../chat'
+import { setupDialogueInteractions } from '../dialogue-interactions'
+
+let dialogueController: ReturnType<typeof setupDialogueInteractions> | null = null
 
 export default {
   providers: [
@@ -22,16 +24,10 @@ export default {
       {
         engine: {
           onStart(engine) {
-            engine.interactions.use(
-              ({ sprite }) => avatarIdForSprite(sprite) !== null,
-              {
-                cursor: 'pointer',
-                click: ({ sprite }) => {
-                  const avatarId = avatarIdForSprite(sprite)
-                  if (avatarId !== null) openAvatarChat(avatarId)
-                },
-              },
-            )
+            dialogueController = setupDialogueInteractions(engine)
+          },
+          onStep() {
+            dialogueController?.step()
           },
         },
         spritesheets: [

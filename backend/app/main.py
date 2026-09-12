@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ValidationError
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 
-from .agent import AvatarAgentRuntime
+from .agent import AgentRuntimeError, AvatarAgentRuntime
 from .zhihu import CapabilityError, ToolContext, build_tool_registry
 from .zhihu.models import (
     DraftInput,
@@ -163,7 +163,13 @@ def oauth_unavailable() -> None:
     )
 
 app = FastAPI(title="数字分身 API", version="0.1.0")
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def resolve_draft_profile(user_id: int) -> DraftProfile:
@@ -227,13 +233,23 @@ async def agent_chat(payload: AgentChatRequest):
             "style": avatar.style,
         }
     conversation_id = payload.conversation_id or f"{payload.user_id}:{payload.avatar_id}"
-    response = await agent_runtime.chat(
-        user_id=payload.user_id,
-        avatar_id=payload.avatar_id,
-        conversation_id=conversation_id,
-        message=payload.message,
-        **profile,
-    )
+    try:
+        response = await agent_runtime.chat(
+            user_id=payload.user_id,
+            avatar_id=payload.avatar_id,
+            conversation_id=conversation_id,
+            message=payload.message,
+            **profile,
+        )
+    except AgentRuntimeError as error:
+        raise HTTPException(
+            error.status_code,
+            detail={
+                "code": error.code,
+                "message": error.message,
+                "retryable": error.retryable,
+            },
+        ) from error
     return AgentChatResponse(
         conversation_id=conversation_id,
         avatar_id=payload.avatar_id,

@@ -1,6 +1,7 @@
 import json
 import os
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 from langchain_core.messages import AIMessage
@@ -8,6 +9,13 @@ from langchain_core.tools import StructuredTool
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent
+from openai import (
+    APIConnectionError,
+    APIStatusError,
+    APITimeoutError,
+    AuthenticationError,
+    RateLimitError,
+)
 
 from .zhihu import ToolContext
 from .zhihu.registry import ToolRegistry
@@ -20,13 +28,47 @@ READ_ONLY_TOOLS = (
 )
 OWNER_TOOLS = READ_ONLY_TOOLS + ("generate_draft", "zhida")
 
+DEFAULT_LLM_MODEL = "deepseek-v4-flash"
+DEFAULT_LLM_BASE_URL = "https://api.openai-next.com/v1"
+
+
+class AgentRuntimeError(Exception):
+    def __init__(
+        self,
+        status_code: int,
+        code: str,
+        message: str,
+        *,
+        retryable: bool,
+    ):
+        super().__init__(message)
+        self.status_code = status_code
+        self.code = code
+        self.message = message
+        self.retryable = retryable
+
+
+def resolve_llm_api_key() -> str:
+    configured_key = os.getenv("LLM_API_KEY") or os.getenv("DEEPSEEK_API_KEY")
+    if configured_key:
+        return configured_key
+
+    config_home = os.getenv("XDG_CONFIG_HOME")
+    config_dir = Path(config_home).expanduser() if config_home else Path.home() / ".config"
+    secret_file = config_dir / "zhiwojing" / "llm-api-key"
+    try:
+        local_key = secret_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        return "not-configured"
+    return local_key or "not-configured"
+
 
 def create_llm() -> ChatOpenAI:
-    """Create the OpenAI-compatible client (DeepSeek by default)."""
+    """Create the OpenAI-compatible client used by avatar agents."""
     return ChatOpenAI(
-        model=os.getenv("LLM_MODEL", "deepseek-chat"),
-        base_url=os.getenv("LLM_BASE_URL", "https://api.deepseek.com"),
-        api_key=os.getenv("LLM_API_KEY") or os.getenv("DEEPSEEK_API_KEY") or "not-configured",
+        model=os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL),
+        base_url=os.getenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL),
+        api_key=resolve_llm_api_key(),
         temperature=float(os.getenv("LLM_TEMPERATURE", "0.4")),
     )
 
@@ -85,10 +127,39 @@ class AvatarAgentRuntime:
             checkpointer=self.checkpointer,
             state_modifier=prompt,
         )
-        result = await agent.ainvoke(
-            {"messages": [("user", message)]},
-            config={"configurable": {"thread_id": conversation_id}},
-        )
+        try:
+            result = await agent.ainvoke(
+                {"messages": [("user", message)]},
+                config={"configurable": {"thread_id": conversation_id}},
+            )
+        except AuthenticationError as error:
+            raise AgentRuntimeError(
+                503,
+                "LLM_AUTH_FAILED",
+                "模型服务认证失败，请重新配置有效的 API Key。",
+                retryable=False,
+            ) from error
+        except RateLimitError as error:
+            raise AgentRuntimeError(
+                429,
+                "LLM_RATE_LIMITED",
+                "模型服务当前请求过多，请稍后重试。",
+                retryable=True,
+            ) from error
+        except (APITimeoutError, APIConnectionError) as error:
+            raise AgentRuntimeError(
+                503,
+                "LLM_UNAVAILABLE",
+                "暂时无法连接模型服务，请稍后重试。",
+                retryable=True,
+            ) from error
+        except APIStatusError as error:
+            raise AgentRuntimeError(
+                502,
+                "LLM_UPSTREAM_ERROR",
+                "模型服务返回异常，请稍后重试。",
+                retryable=True,
+            ) from error
         for item in reversed(result["messages"]):
             if isinstance(item, AIMessage) and item.content:
                 if isinstance(item.content, str):

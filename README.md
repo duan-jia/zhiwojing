@@ -15,6 +15,16 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
+本地测试 Agent 聊天时，先交互式保存一次模型密钥，再使用统一启动脚本：
+
+```bash
+cd backend
+./scripts/configure-local-llm.sh
+./scripts/run-local.sh
+```
+
+密钥只保存在 `~/.config/zhiwojing/llm-api-key`，文件权限为 `600`，不会写入仓库、命令参数或日志；运行中的开发后端也会在下一次 Agent 请求时读取它。Agent 默认通过 `https://api.openai-next.com/v1` 调用 `deepseek-v4-flash`；仍可使用 `LLM_BASE_URL` 和 `LLM_MODEL` 环境变量覆盖。部署时应改用部署平台的 Secret 管理，不要复制本机密钥文件。
+
 再构建并启动独立的 RPGJS 世界服务（Node 22.12+，建议使用 Node 24）：
 
 ```bash
@@ -31,7 +41,7 @@ cd frontend
 npm run dev
 ```
 
-打开 http://localhost:5173。客户端默认连接 `localhost:8001`；跨主机部署时通过 `VITE_RPGJS_SERVER_HOST` 指定 RPGJS 地址。登录页会读取服务端 OAuth 状态；真实授权尚未开放时仍可选择“游客身份进入”，随后使用 WASD 或方向键移动。RPGJS gameplay 在独立 Node 进程中运行，并作为移动、地图与多人同步的唯一世界权威；多个浏览器客户端加入同一 RPGJS 房间后可互见与同步移动。FastAPI 不再承载游戏房间或移动状态，只保留知乎 Tool Registry、REST 能力与 Agent Loop 契约。
+打开 http://localhost:5173。客户端默认连接 `localhost:8001`；跨主机部署时通过 `VITE_RPGJS_SERVER_HOST` 指定 RPGJS 地址。登录页可选择并记住体验用户、苏晚或周博三个本地 Mock 身份；该选择仅用于本地 Demo，不是生产认证。进入世界后使用 WASD 或方向键移动，按 B 打开自己的分身，靠近两格内的玩家或居民后按 E（或点击人物）打开对方分身。RPGJS gameplay 在独立 Node 进程中运行，并作为移动、地图与多人同步的唯一世界权威；多个浏览器客户端加入同一 RPGJS 房间后可互见与同步移动。FastAPI 不再承载游戏房间或移动状态，只保留知乎 Tool Registry、REST 能力与 Agent Loop 契约。
 
 ## 知乎开放平台配置
 
@@ -93,7 +103,7 @@ App ID、OAuth App Key 和 Access Secret 是三种不同凭证，不能互相替
 - `GET /api/zhihu/global-search?query=人工智能&count=10&search_db=all`：搜索全网内容
 - `POST /api/zhihu/answer`：调用知乎直答，请求体为 `{"query":"...","model":"zhida-fast-1p5"}`
 - `POST /api/avatar/draft`：根据想法生成个人风格草稿，可附带最多 10 条 `references`
-- `POST /api/agent/init`、`POST /api/agent/chat`、`POST /api/agent/step`：Agent Loop 的显式契约 stub（当前返回 HTTP 501 占位响应）
+- `POST /api/agent/chat`：运行分身 Agent Loop；`POST /api/agent/init` 和 `POST /api/agent/step` 仍是返回 HTTP 501 的契约占位接口
 
 问题推荐的 `query` 在 API 层可省略；省略时使用服务端 Access Secret 所属账号画像，而不是当前 mock 用户画像。第一版前端要求填写主题，只调用主题推荐模式。
 
@@ -101,6 +111,6 @@ App ID、OAuth App Key 和 Access Secret 是三种不同凭证，不能互相替
 
 ## 验证
 
-前端：在 `frontend/` 运行 `npm run build` 同时生成 `dist/client` 浏览器产物及 `dist/server` RPGJS Node 世界服务；`npm run server` 启动世界权威。`npm test` 继续运行静态回归检查。
+前端：在 `frontend/` 运行 `npm run build` 同时生成 `dist/client` 浏览器产物及 `dist/server` RPGJS Node 世界服务；`npm run server` 启动世界权威。`npm test` 覆盖地图、登录、身份同步、附近目标选择、对话接线和生产预览；Canvas 点击仍需在浏览器中人工走查。
 
 后端：安装依赖后，在 `backend/` 运行 `python -m unittest discover -s tests -v`。测试使用临时 SQLite 数据库，覆盖输入校验、语气和结构、用户初始化及接口错误。
