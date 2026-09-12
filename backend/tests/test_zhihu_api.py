@@ -21,6 +21,8 @@ from app.zhihu.models import (
     QuestionRecommendationsInput,
     ZhidaInput,
     ZhihuSearchInput,
+    UserContentsResult, UserFolloweesResult, UserCollectionsResult,
+    UserFavlistsResult, CreatorStatsResult,
 )
 from app.zhihu.registry import ToolContext, build_tool_registry
 
@@ -187,6 +189,11 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
                 "global_search",
                 "zhida",
                 "generate_draft",
+                "user_contents",
+                "user_followees",
+                "user_collections",
+                "user_favlists",
+                "creator_account_stats",
             ],
         )
         self.assertTrue(all(schema["type"] == "function" for schema in schemas))
@@ -210,6 +217,51 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(CapabilityError) as unknown:
             await registry.execute("missing", {})
         self.assertEqual(unknown.exception.code, "TOOL_NOT_FOUND")
+
+    async def test_personal_tools_call_injected_user_provider(self):
+        class FakeUserProvider:
+            def __init__(self):
+                self.calls = []
+
+            async def user_contents(self, content_type="all", limit=20):
+                self.calls.append(("user_contents", content_type, limit))
+                return UserContentsResult(items=[])
+
+            async def user_followees(self, limit=20):
+                self.calls.append(("user_followees", limit))
+                return UserFolloweesResult(items=[])
+
+            async def user_collections(self, limit=20):
+                self.calls.append(("user_collections", limit))
+                return UserCollectionsResult(items=[])
+
+            async def user_favlists(self, limit=20):
+                self.calls.append(("user_favlists", limit))
+                return UserFavlistsResult(items=[])
+
+            async def creator_account_stats(self):
+                self.calls.append(("creator_account_stats",))
+                return CreatorStatsResult()
+
+        provider = FakeUserProvider()
+        registry = build_tool_registry("http", user_provider=provider)
+        await registry.execute("user_contents", {"content_type": "answer", "limit": 5})
+        await registry.execute("user_followees", {"limit": 6})
+        await registry.execute("user_collections", {"limit": 7})
+        await registry.execute("user_favlists", {"limit": 8})
+        await registry.execute("creator_account_stats", {})
+        self.assertEqual(provider.calls, [
+            ("user_contents", "answer", 5), ("user_followees", 6),
+            ("user_collections", 7), ("user_favlists", 8),
+            ("creator_account_stats",),
+        ])
+
+    async def test_personal_tool_without_access_secret_has_capability_error(self):
+        registry = build_tool_registry("http")
+        with patch.dict(os.environ, {}, clear=True):
+            with self.assertRaises(CapabilityError) as raised:
+                await registry.execute("user_contents", {})
+        self.assertEqual(raised.exception.code, "ZHIHU_NOT_CONFIGURED")
 
     async def test_mcp_selection_keeps_recommendations_on_http(self):
         registry = build_tool_registry("mcp")

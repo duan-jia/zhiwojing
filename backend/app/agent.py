@@ -26,7 +26,10 @@ READ_ONLY_TOOLS = (
     "global_search",
     "question_recommendations",
 )
-OWNER_TOOLS = READ_ONLY_TOOLS + ("generate_draft", "zhida")
+OWNER_TOOLS = READ_ONLY_TOOLS + (
+    "generate_draft", "zhida", "user_contents", "user_followees",
+    "user_collections", "user_favlists", "creator_account_stats",
+)
 
 DEFAULT_LLM_MODEL = "deepseek-v4-flash"
 DEFAULT_LLM_BASE_URL = "https://api.openai-next.com/v1"

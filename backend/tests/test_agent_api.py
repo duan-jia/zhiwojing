@@ -144,12 +144,15 @@ class AgentToolBoundaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("温柔、细腻", captured["prompt"])
         return captured["names"]
 
-    async def test_owner_can_call_all_six_tools(self):
-        self.assertEqual(await self._tool_names_for(2, 2), OWNER_TOOLS)
+    async def test_owner_can_call_all_eleven_tools(self):
+        names = await self._tool_names_for(2, 2)
+        self.assertEqual(names, OWNER_TOOLS)
+        self.assertEqual(len(names), 11)
 
     async def test_other_avatar_exposes_read_only_tools(self):
         names = await self._tool_names_for(1, 2)
         self.assertEqual(names, READ_ONLY_TOOLS)
+        self.assertEqual(len(names), 4)
         self.assertNotIn("generate_draft", names)
         self.assertNotIn("zhida", names)
 
