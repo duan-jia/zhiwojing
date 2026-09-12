@@ -13,7 +13,7 @@
 
 ## 写入流程
 
-`meeting:` 会话在每轮回复后用一次 LLM 生成 `summary/topics/mood/familiarity_delta/relation_tag`，以 `infer=False` 写入 pair，并双向更新关系、追加 episode。交流内容哈希作为幂等键。主人对话每累计 6 条消息提取 `facts/prefs/todos`，以 `infer=True` 写入 private，同时更新 profile 与 episode。
+任意访客会话（`user_id != avatar_id`，不依赖 conversation_id 前缀）在每轮回复后用一次 LLM 生成 `summary/topics/mood/familiarity_delta/relation_tag`，以 `infer=False` 写入 pair，并双向更新关系、追加 episode。交流内容哈希作为幂等键。主人对话每累计 6 条消息提取 `facts/prefs/todos`，以 `infer=True` 写入 private，同时更新 profile 与 episode。
 
 ## 表结构
 
@@ -33,3 +33,5 @@
 OpenAI embedding 与摘要复用 `LLM_BASE_URL`/`LLM_API_KEY`。任何记忆初始化或运行时读写错误都会记录日志并降级，chat/step 的主要响应不被阻断。LangGraph checkpoint 使用目录内 SQLite，conversation_id 跨重启延续。
 
 Mem0 及本地 embedding 的原生依赖采用惰性导入：即使未安装 `mem0ai`、`fastembed` 或 `onnxruntime`，关闭记忆或初始化失败时 API 仍可启动并维持无长期记忆的原行为。生产安装仍通过 `requirements.txt` 的固定版本获得完整能力。
+
+为保持 LangGraph 0.2 系列兼容性，相关依赖固定为 `langgraph==0.2.60`、`langchain-openai==0.2.14` 与 `langgraph-checkpoint-sqlite==2.0.11`（后者要求 `langgraph-checkpoint>=2.0.21,<3.0.0`）。记忆依赖继续固定为 `mem0ai==2.0.20`、`fastembed==0.8.0`、`onnxruntime==1.30.0`。

@@ -4,11 +4,11 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-from sqlmodel import SQLModel, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 from app.memory.config import MemoryConfig
 from app.memory.scopes import pair_scope, private_scope, scopes_for_chat
 from app.memory.service import MemoryService
-from app.memory.store import StructuredStore
+from app.memory.store import Episode, Relationship, StructuredStore
 from app.memory.summarize import parse_json_object
 
 class FakeBackend:
@@ -59,9 +59,16 @@ class MemoryTests(unittest.IsolatedAsyncioTestCase):
     def test_summary_parse(self): self.assertEqual(parse_json_object('```json\n{"facts":["a"]}\n```')["facts"],["a"])
     async def test_pair_conclusion_is_idempotent(self):
         llm=LLM('{"summary":"见面聊书","topics":["书"],"mood":"好","familiarity_delta":0.2,"relation_tag":"书友"}')
-        args=dict(a=2,b=1,conversation_id="meeting:x",user_message="书？",reply="好")
+        args=dict(a=2,b=1,conversation_id="1:2",user_message="书？",reply="好")
         await self.service.conclude_pair(llm,**args); await self.service.conclude_pair(llm,**args)
         self.assertEqual(llm.calls,1); self.assertEqual(len(self.backend.items),1)
+        self.assertEqual(self.backend.items[0]["user_id"], "pair:1-2")
+        with Session(self.engine) as session:
+            relationships=session.exec(select(Relationship)).all()
+            episodes=session.exec(select(Episode)).all()
+        self.assertEqual({(row.avatar_id,row.partner_id) for row in relationships},{(1,2),(2,1)})
+        self.assertEqual(len(episodes),1)
+        self.assertEqual(episodes[0].conversation_id,"1:2")
     async def test_owner_summarizes_each_six_messages(self):
         llm=LLM('{"facts":["住上海"],"prefs":["茶"],"todos":[]}')
         for n in range(3): await self.service.record_owner_turn(llm,avatar_id=1,conversation_id="owner",user_message=str(n),reply="r")
