@@ -15,7 +15,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-本地测试 Agent 聊天时，先交互式保存一次模型密钥，再使用统一启动脚本：
+本地测试 Agent 聊天和知乎能力时，先交互式保存模型 API Key 与知乎 Access Secret，再使用统一启动脚本：
 
 ```bash
 cd backend
@@ -23,7 +23,14 @@ cd backend
 ./scripts/run-local.sh
 ```
 
-密钥只保存在 `~/.config/zhiwojing/llm-api-key`，文件权限为 `600`，不会写入仓库、命令参数或日志；运行中的开发后端也会在下一次 Agent 请求时读取它。Agent 默认通过 `https://api.openai-next.com/v1` 调用 `deepseek-v4-flash`；仍可使用 `LLM_BASE_URL` 和 `LLM_MODEL` 环境变量覆盖。部署时应改用部署平台的 Secret 管理，不要复制本机密钥文件。
+两项密钥保存在仓库外的 `~/.config/zhiwojing/secrets.env`，文件权限为 `600`，不会写入仓库、命令参数或日志。需要更换时可直接编辑该文件，保持以下格式（值不要加引号），然后重启后端：
+
+```text
+LLM_API_KEY=<模型 API Key>
+ZHIHU_ACCESS_SECRET=<知乎开放平台 Access Secret>
+```
+
+启动脚本只接受上述两个白名单变量。Agent 默认通过 `https://api.openai-next.com/v1` 调用 `deepseek-v4-flash`；仍可使用进程环境中的 `LLM_BASE_URL` 和 `LLM_MODEL` 覆盖。部署时应改用部署平台的 Secret 管理，不要复制本机密钥文件。
 
 再构建并启动独立的 RPGJS 世界服务（Node 22.12+，建议使用 Node 24）：
 
@@ -45,14 +52,14 @@ npm run dev
 
 ## 知乎开放平台配置
 
-知乎能力通过 FastAPI 服务端调用知乎开放平台，前端不会接触 Access Secret。先在知乎开放平台个人中心申请个人 Access Secret，再通过启动后端的终端环境提供：
+知乎能力通过 FastAPI 服务端调用知乎开放平台，前端不会接触 Access Secret。先在知乎开放平台个人中心申请个人 Access Secret；本地开发推荐写入上面的仓库外 `secrets.env` 并通过 `./scripts/run-local.sh` 自动加载。临时运行也可以通过终端环境提供：
 
 ```bash
 export ZHIHU_ACCESS_SECRET='<your-access-secret>'
 uvicorn app.main:app --reload --port 8000
 ```
 
-不要把 Access Secret 写入源码、`.env`、日志或前端配置。没有配置时，知乎能力会返回明确的未配置状态，不会伪造结果。
+不要把 Access Secret 写入源码、项目内 `.env`、日志或前端配置。没有配置时，知乎能力会返回明确的未配置状态，不会伪造结果。
 
 默认使用结构化 HTTP API。四项公共内容能力也可以切换到知乎官方 MCP 服务：
 
