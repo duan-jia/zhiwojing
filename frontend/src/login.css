@@ -286,6 +286,45 @@ button:focus-visible {
   background: #1772f6ee;
 }
 
+.autonomy-mode {
+  position: fixed;
+  z-index: 30;
+  top: 18px;
+  right: 18px;
+  display: flex;
+  min-width: 154px;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  border: 3px solid #17345f;
+  color: #17345f;
+  background: #fffdf2ee;
+  box-shadow: 4px 4px #071b3866;
+  pointer-events: none;
+}
+
+.autonomy-mode__dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border: 2px solid #17345f;
+  border-radius: 50%;
+  background: #1772f6;
+}
+
+.autonomy-mode__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.autonomy-mode__label { font-size: 11px; line-height: 1.3; }
+.autonomy-mode__hint { color: #65758a; font-size: 9px; font-weight: 700; line-height: 1.3; }
+.autonomy-mode--agent .autonomy-mode__dot { background: #59b85c; }
+.autonomy-mode--human .autonomy-mode__dot { background: #1772f6; }
+.autonomy-mode--degraded .autonomy-mode__dot { background: #e6a23c; }
+.autonomy-mode--offline .autonomy-mode__dot { background: #d95050; }
+
 .world-connection {
   position: fixed;
   z-index: 90;
@@ -650,6 +689,7 @@ button:focus-visible {
   .chat-form { padding: 10px 11px 7px; }
   .chat-submit { min-width: 64px; }
   .interaction-hud { bottom: 62px; max-width: calc(100% - 20px); white-space: nowrap; }
+  .autonomy-mode { top: 10px; right: 10px; min-width: 140px; padding: 7px 9px; }
   .identity-options { grid-template-columns: 1fr; }
   .identity-option { flex-direction: row; justify-content: space-between; }
 }

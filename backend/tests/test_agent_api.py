@@ -42,6 +42,8 @@ class AgentContractTests(unittest.IsolatedAsyncioTestCase):
             base_url=DEFAULT_LLM_BASE_URL,
             api_key="test-key",
             temperature=0.4,
+            timeout=4.0,
+            max_retries=0,
         )
 
     async def test_llm_key_can_be_loaded_from_user_config(self):
@@ -53,6 +55,15 @@ class AgentContractTests(unittest.IsolatedAsyncioTestCase):
                 os.environ, {"XDG_CONFIG_HOME": config_home}, clear=True
             ):
                 self.assertEqual(resolve_llm_api_key(), "local-test-key")
+
+    async def test_missing_llm_key_fails_without_upstream_request(self):
+        with tempfile.TemporaryDirectory() as config_home, patch.dict(
+            os.environ, {"XDG_CONFIG_HOME": config_home}, clear=True
+        ), patch("app.agent.ChatOpenAI") as chat_openai:
+            with self.assertRaisesRegex(AgentRuntimeError, "尚未配置") as raised:
+                create_llm()
+        self.assertEqual(raised.exception.code, "LLM_NOT_CONFIGURED")
+        chat_openai.assert_not_called()
 
     async def test_init_remains_explicit_stub(self):
         response = await self.post("/api/agent/init", {"user_id": 1})

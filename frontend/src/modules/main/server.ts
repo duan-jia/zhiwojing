@@ -1,9 +1,15 @@
 import { defineModule } from "@rpgjs/common";
-import { RpgServer } from "@rpgjs/server";
-import { player } from './player'
+import { Move, RpgServer } from "@rpgjs/server";
+import { player } from './player.ts'
 
 export default defineModule<RpgServer>({
   player,
+  map: {
+    onLoad(map) {
+      // This MVP keeps avatars only while their browser session is online.
+      ;(map as any).sessionExpiryTime = 0
+    },
+  },
   maps: [{
     id: 'nature-open-world',
     events: [
@@ -37,6 +43,7 @@ export default defineModule<RpgServer>({
           onInit() {
             this.name = '苏晚'
             this.setGraphic('female')
+            this.infiniteMoveRoute([Move.tileLeft(2), Move.tileRight(2)])
           },
         },
       },

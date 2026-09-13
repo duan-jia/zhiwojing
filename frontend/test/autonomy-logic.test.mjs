@@ -1,10 +1,20 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { idleWakeDelay, meetingAllowed, moveTimedOut } from '../src/modules/main/autonomy-logic.ts'
+import { chooseLocation, idleWakeDelay, meetingAllowed, modelRetryDelay, moveTimedOut } from '../src/modules/main/autonomy-logic.ts'
 import { mappedAutonomyAction, processAutonomyKey } from '../src/autonomy-input-logic.ts'
+import { autonomyModeView } from '../src/autonomy-status.ts'
+import { readFile } from 'node:fs/promises'
 
 const controls = { agentToggle: ['g'], up: ['w'], down: ['s'], left: ['a'], right: ['d'] }
 const matches = (event, bind) => bind?.includes(event.key.toLowerCase()) ?? false
+
+test('client scene change hook routes authoritative updates to autonomy sync', async () => {
+  const config = await readFile(new URL('../src/config/config.client.ts', import.meta.url), 'utf8')
+  assert.match(config, /sceneMap:\s*\{[\s\S]*onChanges\(scene, \{ partial \}\)[\s\S]*recordSyncDiagnostic\(scene, partial\)/)
+  assert.doesNotMatch(config, /applyAutonomyPositionSync\(scene, partial\)/)
+  assert.doesNotMatch(config, /movementAuthority:/)
+  assert.doesNotMatch(config, /prediction:/)
+})
 
 test('meeting cooldown and movement timeout boundaries are deterministic', () => {
   assert.equal(meetingAllowed(undefined, 70_000), true)
@@ -14,9 +24,16 @@ test('meeting cooldown and movement timeout boundaries are deterministic', () =>
   assert.equal(moveTimedOut(5_000, 20_000), true)
 })
 
-test('idle wake remains bounded between four and ten seconds', () => {
-  assert.equal(idleWakeDelay(() => 0), 4_000)
-  assert.equal(idleWakeDelay(() => 0.999999), 10_000)
+test('local patrol dwell and model retry remain bounded', () => {
+  assert.equal(idleWakeDelay(() => 0), 2_000)
+  assert.equal(idleWakeDelay(() => 0.999999), 5_000)
+  assert.deepEqual([1, 2, 3, 4].map(modelRetryDelay), [15_000, 30_000, 60_000, 60_000])
+})
+
+test('local patrol avoids the current and previous landmark', () => {
+  const locations = [{ id: 'a' }, { id: 'b' }, { id: 'c' }]
+  assert.equal(chooseLocation(locations, ['a', 'b'], () => 0)?.id, 'c')
+  assert.equal(chooseLocation(locations, ['a'], () => 0)?.id, 'b')
 })
 
 test('input mapping toggles G and only takes control from active autonomy', () => {
@@ -32,4 +49,15 @@ test('input mapping toggles G and only takes control from active autonomy', () =
   }
   processAutonomyKey(engine, { key: 'w' }, matches)
   assert.deepEqual(actions, [{ action: 'takeControl' }])
+})
+
+test('mode status explains human, agent, degraded and disconnected states', () => {
+  assert.deepEqual(autonomyModeView(true, 'agent', true), {
+    label: '分身托管中', hint: '按 G 真人接管', className: 'autonomy-mode--agent',
+  })
+  assert.deepEqual(autonomyModeView(false, 'human', true), {
+    label: '真人控制中', hint: '按 G 交给分身', className: 'autonomy-mode--human',
+  })
+  assert.equal(autonomyModeView(true, 'degraded', true).label, '本地巡游中')
+  assert.equal(autonomyModeView(true, 'agent', false).label, '世界连接已断开')
 })

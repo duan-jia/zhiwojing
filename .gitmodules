@@ -1,0 +1,5 @@
+[submodule "frontend/vendor/@rpgjs/client"]
+	path = frontend/vendor/@rpgjs/client
+	url = https://github.com/duan-jia/RPG-JS.git
+	branch = master
+	ignore = untracked

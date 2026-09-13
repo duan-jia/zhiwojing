@@ -4,6 +4,8 @@ import { provideTiledMap } from "@rpgjs/tiledmap/client";
 import { setupDialogueInteractions } from '../dialogue-interactions'
 import { setupAgentBubbles } from '../agent-bubbles'
 import { setupAutonomyInput } from '../autonomy-input'
+import { setupAutonomyStatus } from '../autonomy-status'
+import { recordE2eSync, recordSyncDiagnostic, setupE2eTelemetry } from '../e2e-telemetry'
 import { provideActionBattle } from '@rpgjs/action-battle/client'
 import { actionBattleOptions } from '../modules/main/combat'
 import { setupCombatInput } from '../combat-input'
@@ -12,6 +14,7 @@ import { setupCombatHud } from '../combat-hud'
 let bubbleController: ReturnType<typeof setupAgentBubbles> | null = null
 let dialogueController: ReturnType<typeof setupDialogueInteractions> | null = null
 let autonomyInputController: ReturnType<typeof setupAutonomyInput> | null = null
+let autonomyStatusController: ReturnType<typeof setupAutonomyStatus> | null = null
 let combatInputController: ReturnType<typeof setupCombatInput> | null = null
 let combatHudController: ReturnType<typeof setupCombatHud> | null = null
 
@@ -35,6 +38,15 @@ export default {
     provideClientModules([
       {
         engine: {
+          onConnected() {
+            autonomyStatusController?.setConnected(true)
+          },
+          onDisconnected() {
+            autonomyStatusController?.setConnected(false)
+          },
+          onConnectError() {
+            autonomyStatusController?.setConnected(false)
+          },
           onStart(engine) {
             autonomyInputController?.destroy()
             autonomyInputController = setupAutonomyInput(engine)
@@ -42,13 +54,22 @@ export default {
             combatInputController = setupCombatInput(engine)
             combatHudController?.destroy()
             combatHudController = setupCombatHud(engine)
+            autonomyStatusController = setupAutonomyStatus(engine)
+            setupE2eTelemetry(engine)
             dialogueController = setupDialogueInteractions(engine)
             bubbleController = setupAgentBubbles(engine)
           },
           onStep() {
             dialogueController?.step()
             bubbleController?.step()
+            autonomyStatusController?.step()
             combatHudController?.step()
+          },
+        },
+        sceneMap: {
+          onChanges(scene, { partial }) {
+            recordE2eSync(partial)
+            recordSyncDiagnostic(scene, partial)
           },
         },
         spritesheets: [

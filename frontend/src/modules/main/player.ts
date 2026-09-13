@@ -3,7 +3,8 @@ import type {
     RpgPlayerConnectionContext,
     RpgPlayerHooks,
 } from '@rpgjs/server'
-import { enableAgent, takeControl, toggleAgent } from './autonomy'
+import { disposeAgent, enableAgent, takeControl, toggleAgent } from './autonomy.ts'
+import { handleAutonomyInput } from './player-input.ts'
 import { clearRespawnTimer, initializeCombatPlayer, revivePlayer } from './combat'
 
 const profiles = {
@@ -29,6 +30,7 @@ export const player: RpgPlayerHooks = {
     props: {
         agentMode: { $default: true, $syncWithClient: true, $permanent: false },
         agentSpeech: { $default: '', $syncWithClient: true, $permanent: false },
+        agentState: { $default: 'agent', $syncWithClient: true, $permanent: false },
         avatarId: {
             $default: 1,
             $syncWithClient: true,
@@ -39,15 +41,25 @@ export const player: RpgPlayerHooks = {
     async onConnected(player: RpgPlayer) {
         player.name = '体验用户'
         player.setGraphic('hero')
-        await player.changeMap('nature-open-world', 'start')
         const actionPlayer = player as RpgPlayer & { on(event: string, callback: () => void): void }
-        actionPlayer.on('agentToggle', () => toggleAgent(player as any))
-        actionPlayer.on('takeControl', () => takeControl(player as any))
         actionPlayer.on('revive', () => revivePlayer(player))
         initializeCombatPlayer(player)
-        enableAgent(player as any)
+        await player.changeMap('nature-open-world', 'start')
+    },
+    onJoinMap(player: RpgPlayer) {
+        const synchronizedPlayer = player as RpgPlayer & {
+            agentMode: (() => boolean) & { set(value: boolean): void }
+        }
+        if (synchronizedPlayer.agentMode()) enableAgent(player as any)
+    },
+    onInput(player: RpgPlayer, data: any) {
+        handleAutonomyInput(player as any, data, { toggleAgent, takeControl })
+    },
+    onLeaveMap(player: RpgPlayer) {
+        disposeAgent(player as any)
     },
     onDisconnected(player: RpgPlayer) {
+        disposeAgent(player as any)
         clearRespawnTimer(player)
         const synchronizedPlayer = player as RpgPlayer & { avatarId: AvatarIdSignal }
         presence(synchronizedPlayer.avatarId(), false, false)

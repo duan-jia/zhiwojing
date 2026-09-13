@@ -1,6 +1,8 @@
 material
 node_modules/
 dist/
+test-results/
+playwright-report/
 .venv/
 __pycache__/
 *.pyc

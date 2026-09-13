@@ -68,11 +68,21 @@ def resolve_llm_api_key() -> str:
 
 def create_llm() -> ChatOpenAI:
     """Create the OpenAI-compatible client used by avatar agents."""
+    api_key = resolve_llm_api_key()
+    if api_key == "not-configured":
+        raise AgentRuntimeError(
+            503,
+            "LLM_NOT_CONFIGURED",
+            "模型服务尚未配置，分身将使用本地巡游。",
+            retryable=False,
+        )
     return ChatOpenAI(
         model=os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL),
         base_url=os.getenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL),
-        api_key=resolve_llm_api_key(),
+        api_key=api_key,
         temperature=float(os.getenv("LLM_TEMPERATURE", "0.4")),
+        timeout=4.0,
+        max_retries=0,
     )
 
 

@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 import { rpgjs, tiledMapFolderPlugin } from '@rpgjs/vite';
-import startServer from './src/server';
+import startServer from './src/server.ts';
 
 export default defineConfig({
   optimizeDeps: {

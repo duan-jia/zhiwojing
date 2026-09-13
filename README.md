@@ -6,7 +6,15 @@
 
 ## 本地运行
 
-先启动 FastAPI「大脑」服务（Python 3.11+）：
+完成依赖安装后，推荐在仓库根目录一键启动完整本地链路：
+
+```bash
+./scripts/run-local.sh
+```
+
+它会构建前端并启动 FastAPI 8000、RPGJS world 8001 和 Vite 5173；任一服务退出时会停止其余进程。没有模型密钥时仍可进入世界，托管角色会显示“本地巡游中”并使用确定性地标巡游。
+
+也可以分别启动。先启动 FastAPI「大脑」服务（Python 3.11+）：
 
 ```bash
 cd backend
@@ -110,7 +118,7 @@ App ID、OAuth App Key 和 Access Secret 是三种不同凭证，不能互相替
 - `GET /api/zhihu/global-search?query=人工智能&count=10&search_db=all`：搜索全网内容
 - `POST /api/zhihu/answer`：调用知乎直答，请求体为 `{"query":"...","model":"zhida-fast-1p5"}`
 - `POST /api/avatar/draft`：根据想法生成个人风格草稿，可附带最多 10 条 `references`
-- `POST /api/agent/chat`：运行分身 Agent Loop；`POST /api/agent/init` 和 `POST /api/agent/step` 仍是返回 HTTP 501 的契约占位接口
+- `POST /api/agent/chat`：运行分身 Agent Loop；`POST /api/agent/step` 返回分身下一段高层行为意图；`POST /api/agent/init` 仍是 HTTP 501 契约占位接口
 
 问题推荐的 `query` 在 API 层可省略；省略时使用服务端 Access Secret 所属账号画像，而不是当前 mock 用户画像。第一版前端要求填写主题，只调用主题推荐模式。
 
