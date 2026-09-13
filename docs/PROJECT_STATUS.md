@@ -24,7 +24,7 @@ FastAPI 不再持有地图、房间、角色位置或 WebSocket 移动状态；`
 - RPGJS 服务端权威 MMORPG 多人同步。
 - 知乎公共内容、草稿、OAuth 预留 REST 能力保持不变。
 - `POST /api/agent/chat` 已实现整段响应的 Agent Loop：自己的分身可用 11 个工具（4 个只读工具、`generate_draft`/`zhida`，以及 `user_contents`、`user_followees`、`user_collections`、`user_favlists`、`creator_account_stats` 5 个个人数据工具），访问别人的分身只可用 4 个只读工具。
-- 登录页可选择 3 个本地 Mock 身份并通过 RPGJS 同步给其他客户端；默认体验用户使用刘看山 3×4 行走图，登录页同步展示其正面站立帧；按 B 与自己的分身对话，靠近两格内的在线玩家或静态居民后通过 E/点击与对方分身对话。
+- 登录页提供游客进入与知乎 OAuth 两条入口；游客沿用默认体验用户的刘看山 3×4 行走图并通过 RPGJS 同步给其他客户端；按 B 与自己的分身对话，靠近两格内的在线玩家或静态居民后通过 E/点击与对方分身对话。
 - 对话复用一个本地面板并按分身保留页面内历史；打开面板会停止本地移动，但世界继续运行。Mock `avatar_id` 由客户端提供，只适用于本地 Demo，不能作为生产权限边界。
 - Agent 默认使用 OpenAI 兼容地址 `https://api.openai-next.com/v1` 和模型 `deepseek-v4-flash`。本地模型 Key 与知乎 Access Secret 统一保存在仓库外的 `~/.config/zhiwojing/secrets.env`，并由 `run-local.sh` 在启动时读取；生产环境仍由部署平台注入 Secret。
 - `POST /api/agent/step` 提供高层行为意图；`POST /api/agent/init` 仍为 HTTP 501 契约占位。
