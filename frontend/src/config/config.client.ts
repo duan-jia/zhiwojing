@@ -13,6 +13,7 @@ import { setupCombatHud } from '../combat-hud'
 import { setupMenuInput } from '../menu-input'
 import { RemotePlayerHealth } from '../remote-player-health'
 import { withCombatAnimationAliases } from '../combat-animation-logic'
+import { applyCameraZoom, applyCameraZoomWhenReady } from '../camera'
 
 let bubbleController: ReturnType<typeof setupAgentBubbles> | null = null
 let dialogueController: ReturnType<typeof setupDialogueInteractions> | null = null
@@ -52,6 +53,7 @@ export default {
             autonomyStatusController?.setConnected(false)
           },
           onStart(engine) {
+            applyCameraZoomWhenReady(engine)
             engine.addSpriteComponentInFront(RemotePlayerHealth)
             menuInputController?.destroy()
             menuInputController = setupMenuInput(engine)
@@ -75,6 +77,7 @@ export default {
         },
         sceneMap: {
           onChanges(scene, { partial }) {
+            applyCameraZoom({ sceneMap: scene })
             recordE2eSync(partial)
             recordSyncDiagnostic(scene, partial)
           },

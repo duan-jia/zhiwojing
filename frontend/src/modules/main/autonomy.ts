@@ -9,15 +9,17 @@ import {
   moveTimedOut,
 } from './autonomy-logic.ts'
 
+export const TILE_SIZE = 32
+
 export const AGENT_LOCATIONS = [
-  { id: 'square', name: '广场', x: 25, y: 23 },
-  { id: 'well', name: '水井', x: 27, y: 23 },
-  { id: 'woods', name: '树林', x: 22, y: 25 },
-  { id: 'river', name: '河边', x: 26, y: 27 },
-  { id: 'market', name: '集市', x: 29, y: 25 },
+  { id: 'square', name: '中央广场', x: 29, y: 24 },
+  { id: 'home', name: '知我居门前', x: 14, y: 17 },
+  { id: 'studio', name: '创作坊门前', x: 26, y: 15 },
+  { id: 'post', name: '邮局门前', x: 38, y: 17 },
+  { id: 'tea', name: '茶馆门前', x: 12, y: 27 },
+  { id: 'market', name: '集市门前', x: 40, y: 27 },
 ] as const
 
-const TILE_SIZE = 32
 const MEETING_DISTANCE = 2
 const MAX_MODEL_CONCURRENCY = 3
 const API_URL = (typeof process !== 'undefined' && process.env.AVATAR_API_URL) || 'http://127.0.0.1:8000'

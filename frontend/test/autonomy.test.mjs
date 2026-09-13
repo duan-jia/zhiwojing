@@ -5,7 +5,7 @@ import { handleAutonomyInput } from '../src/modules/main/player-input.ts'
 const autonomy = await readFile(new URL('../src/modules/main/autonomy.ts', import.meta.url), 'utf8')
 const playerHooks = await readFile(new URL('../src/modules/main/player.ts', import.meta.url), 'utf8')
 test('autonomy is transition-driven and defines nearby locations', () => {
-  for (const name of ['广场', '水井', '树林', '河边', '集市']) assert.match(autonomy, new RegExp(name))
+  for (const name of ['中央广场', '知我居门前', '创作坊门前', '邮局门前', '茶馆门前', '集市门前']) assert.match(autonomy, new RegExp(name))
   assert.match(autonomy, /startNextLeg/)
   assert.doesNotMatch(autonomy, /setInterval/)
   assert.match(autonomy, /scheduleMeetingCheck/)
