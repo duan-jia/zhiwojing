@@ -8,7 +8,7 @@ import { handleAutonomyInput } from './player-input.ts'
 import { clearRespawnTimer, initializeCombatPlayer, revivePlayer } from './combat'
 
 const profiles = {
-    1: { name: '体验用户', graphic: 'hero' },
+    1: { name: '体验用户', graphic: 'liukanshan' },
     2: { name: '苏晚', graphic: 'female' },
     3: { name: '周博', graphic: 'hero' },
 } as const
@@ -40,7 +40,7 @@ export const player: RpgPlayerHooks = {
     },
     async onConnected(player: RpgPlayer) {
         player.name = '体验用户'
-        player.setGraphic('hero')
+        player.setGraphic('liukanshan')
         const actionPlayer = player as RpgPlayer & { on(event: string, callback: () => void): void }
         actionPlayer.on('revive', () => revivePlayer(player))
         initializeCombatPlayer(player)

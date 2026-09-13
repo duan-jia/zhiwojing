@@ -661,7 +661,7 @@ button:focus-visible {
   left: 50%;
   width: 58%;
   aspect-ratio: 1;
-  background: url('/spritesheets/hero.png') 50% 0 / 300% 400% no-repeat;
+  background: url('/spritesheets/liukanshan.png') 50% 0 / 300% 400% no-repeat;
   image-rendering: pixelated;
   transform: translateX(-50%);
   animation: login-idle 2s steps(2, end) infinite;

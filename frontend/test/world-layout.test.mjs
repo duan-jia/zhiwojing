@@ -123,7 +123,7 @@ test('runtime uses one continuous 100 by 100 map with the four source quadrants 
 
   const playerSource = await readFile(join(projectRoot, 'src', 'modules', 'main', 'player.ts'), 'utf8')
   assert(
-    playerSource.indexOf("player.setGraphic('hero')") < playerSource.indexOf("await player.changeMap('nature-open-world', 'start')"),
+    playerSource.indexOf("player.setGraphic('liukanshan')") < playerSource.indexOf("await player.changeMap('nature-open-world', 'start')"),
     'player graphic must be set before the initial map transfer'
   )
 })

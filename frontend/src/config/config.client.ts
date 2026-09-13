@@ -96,6 +96,12 @@ export default {
             ...withCombatAnimationAliases(Presets.RMSpritesheet(3, 4))
           },
           {
+            id: 'liukanshan',
+            image: 'spritesheets/liukanshan.png',
+            displayScale: 0.6,
+            ...Presets.RMSpritesheet(3, 4)
+          },
+          {
             id: 'female',
             image: 'spritesheets/female.png',
              ...withCombatAnimationAliases(Presets.RMSpritesheet(3, 4))

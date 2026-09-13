@@ -7,13 +7,15 @@ import { fileURLToPath } from 'node:url'
 const projectRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 
 test('login shell gates RPGJS startup and preserves guest and OAuth paths', async () => {
-  const [html, client, login, styles, contacts, menuInput] = await Promise.all([
+  const [html, client, login, styles, contacts, menuInput, clientConfig, liukanshan] = await Promise.all([
     readFile(join(projectRoot, 'index.html'), 'utf8'),
     readFile(join(projectRoot, 'src', 'client.ts'), 'utf8'),
     readFile(join(projectRoot, 'src', 'login.ts'), 'utf8'),
     readFile(join(projectRoot, 'src', 'login.css'), 'utf8'),
     readFile(join(projectRoot, 'src', 'contacts.ts'), 'utf8'),
     readFile(join(projectRoot, 'src', 'menu-input.ts'), 'utf8'),
+    readFile(join(projectRoot, 'src', 'config', 'config.client.ts'), 'utf8'),
+    readFile(join(projectRoot, 'public', 'spritesheets', 'liukanshan.png')),
   ])
 
   assert.match(html, /id="login-root"/)
@@ -27,6 +29,11 @@ test('login shell gates RPGJS startup and preserves guest and OAuth paths', asyn
   assert.match(login, /\/api\/oauth\/start/)
   assert.match(login, /integrationReady/)
   assert.match(styles, /@media \(max-width: 720px\)/)
+  assert.match(styles, /spritesheets\/liukanshan\.png/)
+  assert.match(clientConfig, /id: 'liukanshan'/)
+  assert.match(clientConfig, /image: 'spritesheets\/liukanshan\.png'/)
+  assert.equal(liukanshan.readUInt32BE(16), 192)
+  assert.equal(liukanshan.readUInt32BE(20), 256)
   assert.doesNotMatch(html, /class="controls-hint"/)
   assert.match(menuInput, /操作按键/)
   assert.match(menuInput, /WASD \/ 方向键/)
