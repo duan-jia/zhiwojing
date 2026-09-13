@@ -1,7 +1,7 @@
 export interface Contact { id: number; name: string; online: boolean; humanControlled: boolean; lastMessage: string | null; unread: number }
 export interface ThreadMessage { id: number; senderId: number; senderKind: 'human' | 'agent'; content: string; createdAt: string }
-export const totalUnread = (contacts: Contact[]): number => contacts.reduce((sum, item) => sum + item.unread, 0)
-export const deliveryNotice = (result: { delivered: string; capped?: boolean }): string => result.capped || result.delivered === 'capped' ? '分身连续回复已达上限，请等待对方本人回复。' : ''
+import { deliveryNotice, totalUnread } from './contacts-logic.mjs'
+export { deliveryNotice, totalUnread } from './contacts-logic.mjs'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const escapeHtml = (value: string): string => value.replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char] ?? char)

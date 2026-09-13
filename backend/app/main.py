@@ -247,7 +247,7 @@ def _build_agent_runtime():
         return AvatarAgentRuntime(tool_registry, memory_service=service, checkpointer=SqliteSaver(connection))
     except Exception:
         logging.getLogger(__name__).exception("memory initialization failed; continuing without memory")
-        return AvatarAgentRuntime(tool_registry)
+        return AvatarAgentRuntime(tool_registry, memory_service=MemoryService(None, communication_store))
 
 communication_store = StructuredStore(engine)
 agent_runtime = _build_agent_runtime()

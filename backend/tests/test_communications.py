@@ -8,6 +8,7 @@ import httpx
 from sqlmodel import Session, create_engine, select
 from app import main
 from app.memory.store import Contact, Message
+from app.memory import MemoryConfig
 
 
 class CommunicationTests(unittest.IsolatedAsyncioTestCase):
@@ -42,6 +43,18 @@ class CommunicationTests(unittest.IsolatedAsyncioTestCase):
         runtime = AsyncMock()
         with patch.object(main, 'agent_runtime', runtime): result = await self.send()
         self.assertEqual(result.json()['delivered'], 'human'); runtime.chat.assert_not_called()
+
+    async def test_memory_initialization_failure_keeps_structured_communication(self):
+        config = MemoryConfig(enabled=True, data_dir=Path(self.tmp.name), embedder='fastembed', embedder_model='test')
+        with patch.object(main.MemoryConfig, 'from_env', return_value=config), patch.object(main, 'build_mem0', side_effect=RuntimeError('boom')):
+            runtime = main._build_agent_runtime()
+        self.assertIsNotNone(runtime.memory_service)
+        runtime.memory_service.store.ensure_contacts(1, 3)
+        with Session(main.engine) as session:
+            contact = session.exec(select(Contact).where(Contact.user_id == 1, Contact.contact_id == 3)).first()
+            self.assertIsNotNone(contact)
+        await self.client.post('/api/presence', json={"user_id": 3, "online": True, "human_controlled": True})
+        self.assertEqual((await self.send(recipient=3)).json()['delivered'], 'human')
 
     async def test_offline_agent_reply_cap_read_and_human_reset(self):
         runtime = AsyncMock(); runtime.chat.return_value = '你好呀'
