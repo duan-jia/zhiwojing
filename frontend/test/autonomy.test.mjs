@@ -53,6 +53,10 @@ test('server input handler routes G toggle and take-control actions', () => {
   assert.equal(controlled.mode(), false)
   assert.equal(controlled.stops(), 1)
 
+  handleAutonomyInput(controlled.player, { action: 'right' }, handlers)
+  handleAutonomyInput(controlled.player, { direction: 'right' }, handlers)
+  assert.equal(controlled.stops(), 1)
+
   assert.match(playerHooks, /onInput\(player:/)
   assert.match(playerHooks, /handleAutonomyInput\(player/)
   assert.doesNotMatch(playerHooks, /\.on\('agentToggle'/)

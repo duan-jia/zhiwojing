@@ -154,6 +154,27 @@ test('two clients render delegated movement, G takeover, and degraded patrol', a
     await expect(pageA.locator('.autonomy-mode__label')).toHaveText('真人控制中')
     await expect.poll(async () => (await snapshot(pageA)).players[beforeA.currentId].agentMode).toBe(false)
 
+    await pageA.keyboard.down('ArrowRight')
+    await pageA.waitForTimeout(250)
+    await pageA.keyboard.up('ArrowRight')
+    await pageA.keyboard.press('g')
+    await expect(pageA.locator('.autonomy-mode__label')).toHaveText('分身托管中')
+    const delegatedAgain = await snapshot(pageA)
+    const delegatedOrigin = delegatedAgain.players[delegatedAgain.currentId]
+    await Promise.all([
+      expect.poll(async () => {
+        const current = await snapshot(pageA)
+        const after = current.players[current.currentId]
+        return Math.hypot(after.x - delegatedOrigin.x, after.y - delegatedOrigin.y)
+      }, { timeout: 10_000 }).toBeGreaterThan(8),
+      expect.poll(async () => {
+        const observer = await snapshot(pageB)
+        const after = observer.players[beforeA.currentId]
+        if (!after) return 0
+        return Math.hypot(after.x - delegatedOrigin.x, after.y - delegatedOrigin.y)
+      }, { timeout: 10_000 }).toBeGreaterThan(8),
+    ])
+
     failSteps = true
     const pageC = await enterWorld(contextC, 3)
     await expect(pageC.locator('.autonomy-mode__label')).toHaveText('本地巡游中')
