@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="144" height="192" viewBox="0 0 144 192">
-  <defs><g id="home"><path d="M8 25 24 9l16 16v17H8z" fill="#fff0bd" stroke="#17345f" stroke-width="3"/><path d="M18 42V29h12v13" fill="#f25b36" stroke="#17345f" stroke-width="3"/><path d="M5 25 24 6l19 19" fill="none" stroke="#17345f" stroke-width="5" stroke-linejoin="round"/></g></defs>
-  <use href="#home" x="0" y="0"/><use href="#home" x="48" y="0"/><use href="#home" x="96" y="0"/>
-  <use href="#home" x="0" y="48"/><use href="#home" x="48" y="48"/><use href="#home" x="96" y="48"/>
-  <use href="#home" x="0" y="96"/><use href="#home" x="48" y="96"/><use href="#home" x="96" y="96"/>
-  <use href="#home" x="0" y="144"/><use href="#home" x="48" y="144"/><use href="#home" x="96" y="144"/>
-</svg>
