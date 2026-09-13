@@ -61,6 +61,18 @@ test('RPGJS connection query becomes synchronized mock identity metadata', async
   assert.match(mockPlayer.name, /^体验用户 · /)
 })
 
+test('Escape input opens the RPGJS main menu', async () => {
+  const { player } = await loadTypeScriptModule('src/modules/main/player.ts')
+  let opened = 0
+  const mockPlayer = { callMainMenu: () => { opened += 1 } }
+
+  player.onInput(mockPlayer, { action: 'escape' })
+  assert.equal(opened, 1)
+
+  player.onInput(mockPlayer, { action: 'agentToggle' })
+  assert.equal(opened, 1)
+})
+
 test('nearby dialogue targets include players and residents and exclude self', async () => {
   const dialogue = await loadTypeScriptModule('src/dialogue-target.ts')
   const sprite = (id, avatarId, x, y, name, type = 'player') => ({

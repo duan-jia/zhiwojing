@@ -3,6 +3,7 @@ import test from 'node:test'
 import { chooseLocation, idleWakeDelay, meetingAllowed, modelRetryDelay, moveTimedOut } from '../src/modules/main/autonomy-logic.ts'
 import { mappedAutonomyAction, processAutonomyKey } from '../src/autonomy-input-logic.ts'
 import { autonomyModeView } from '../src/autonomy-status.ts'
+import { processMenuKey } from '../src/menu-input.ts'
 import { readFile } from 'node:fs/promises'
 
 const controls = { agentToggle: ['g'], up: ['w'], down: ['s'], left: ['a'], right: ['d'] }
@@ -49,6 +50,24 @@ test('input mapping toggles G and only takes control from active autonomy', () =
   }
   processAutonomyKey(engine, { key: 'w' }, matches)
   assert.deepEqual(actions, [{ action: 'takeControl' }])
+})
+
+test('Escape sends a menu action only while gameplay input is active', () => {
+  const actions = []
+  const engine = {
+    stopProcessingInput: false,
+    processAction: action => actions.push(action),
+  }
+  let prevented = 0
+  const event = { key: 'Escape', repeat: false, target: null, preventDefault: () => { prevented += 1 } }
+
+  assert.equal(processMenuKey(engine, event), true)
+  assert.deepEqual(actions, [{ action: 'escape' }])
+  assert.equal(prevented, 1)
+
+  engine.stopProcessingInput = true
+  assert.equal(processMenuKey(engine, event), false)
+  assert.equal(actions.length, 1)
 })
 
 test('mode status explains human, agent, degraded and disconnected states', () => {

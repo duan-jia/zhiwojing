@@ -53,6 +53,12 @@ export const player: RpgPlayerHooks = {
         if (synchronizedPlayer.agentMode()) enableAgent(player as any)
     },
     onInput(player: RpgPlayer, data: any) {
+        const action = String(data?.action ?? data?.input ?? '')
+        if (action === 'escape') {
+            const openMenu = (player as any)._gui?.['rpg-main-menu']
+            if (!openMenu) void player.callMainMenu()
+            return
+        }
         handleAutonomyInput(player as any, data, { toggleAgent, takeControl })
     },
     onLeaveMap(player: RpgPlayer) {

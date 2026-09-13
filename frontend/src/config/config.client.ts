@@ -10,6 +10,7 @@ import { provideActionBattle } from '@rpgjs/action-battle/client'
 import { actionBattleOptions } from '../modules/main/combat'
 import { setupCombatInput } from '../combat-input'
 import { setupCombatHud } from '../combat-hud'
+import { setupMenuInput } from '../menu-input'
 
 let bubbleController: ReturnType<typeof setupAgentBubbles> | null = null
 let dialogueController: ReturnType<typeof setupDialogueInteractions> | null = null
@@ -17,6 +18,7 @@ let autonomyInputController: ReturnType<typeof setupAutonomyInput> | null = null
 let autonomyStatusController: ReturnType<typeof setupAutonomyStatus> | null = null
 let combatInputController: ReturnType<typeof setupCombatInput> | null = null
 let combatHudController: ReturnType<typeof setupCombatHud> | null = null
+let menuInputController: ReturnType<typeof setupMenuInput> | null = null
 
 export default {
   providers: [
@@ -48,6 +50,8 @@ export default {
             autonomyStatusController?.setConnected(false)
           },
           onStart(engine) {
+            menuInputController?.destroy()
+            menuInputController = setupMenuInput(engine)
             autonomyInputController?.destroy()
             autonomyInputController = setupAutonomyInput(engine)
             combatInputController?.destroy()

@@ -17,7 +17,6 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 export function showLogin(): Promise<MockIdentity> {
   const root = document.querySelector<HTMLElement>('#login-root')
   const game = document.querySelector<HTMLElement>('#rpg')
-  const controls = document.querySelector<HTMLElement>('.controls-hint')
 
   if (!root || !game) {
     return Promise.resolve(readStoredIdentity(window.localStorage))
@@ -134,7 +133,6 @@ export function showLogin(): Promise<MockIdentity> {
     guestButton?.addEventListener('click', () => {
       persistIdentity(selectedIdentity, window.localStorage)
       game.hidden = false
-      if (controls) controls.hidden = false
       root.remove()
       resolve(selectedIdentity)
     }, { once: true })

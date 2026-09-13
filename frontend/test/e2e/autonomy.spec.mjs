@@ -122,6 +122,23 @@ test.afterEach(async ({}, testInfo) => {
   for (const child of processes) console.error(child.output())
 })
 
+test('Escape opens and closes the controls menu', async () => {
+  const browser = await chromium.launch()
+  const context = await browser.newContext()
+  try {
+    const page = await enterWorld(context, 1)
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.rpg-ui-main-menu')).toBeVisible()
+    await expect(page.getByText('操作按键', { exact: true })).toBeVisible()
+
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.rpg-ui-main-menu')).toBeHidden()
+  } finally {
+    await context.close()
+    await browser.close()
+  }
+})
+
 test('two clients render delegated movement, G takeover, and degraded patrol', async () => {
   test.setTimeout(60_000)
   const browser = await chromium.launch()

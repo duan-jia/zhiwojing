@@ -20,20 +20,6 @@
         overflow: hidden;
       }
 
-      .controls-hint {
-        position: fixed;
-        z-index: 10;
-        right: 18px;
-        bottom: 18px;
-        padding: 10px 14px;
-        border: 1px solid rgb(255 255 255 / 35%);
-        border-radius: 10px;
-        color: #fff;
-        background: rgb(24 31 24 / 72%);
-        font: 600 14px/1.6 Fredoka, system-ui, sans-serif;
-        box-shadow: 0 6px 20px rgb(0 0 0 / 22%);
-        pointer-events: none;
-      }
     </style>
   </head>
   <body>
@@ -43,13 +29,14 @@
     <div id="landmark-root" hidden></div>
     <div id="interaction-hud" class="interaction-hud" hidden></div>
     <div id="contacts-root" hidden></div>
-    <div id="autonomy-mode" class="autonomy-mode" role="status" aria-live="polite" hidden>
-      <span class="autonomy-mode__dot" aria-hidden="true"></span>
-      <span class="autonomy-mode__copy">
-        <strong class="autonomy-mode__label"></strong>
-        <small class="autonomy-mode__hint"></small>
-      </span>
+    <div id="top-right-hud" class="top-right-hud">
+      <div id="autonomy-mode" class="autonomy-mode" role="status" aria-live="polite" hidden>
+        <span class="autonomy-mode__dot" aria-hidden="true"></span>
+        <span class="autonomy-mode__copy">
+          <strong class="autonomy-mode__label"></strong>
+          <small class="autonomy-mode__hint"></small>
+        </span>
+      </div>
     </div>
-    <div class="controls-hint" hidden>WASD / 方向键移动 · G 切换托管 · B 我的分身 · E 互动</div>
   </body>
 </html>

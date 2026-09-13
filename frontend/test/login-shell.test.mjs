@@ -7,11 +7,13 @@ import { fileURLToPath } from 'node:url'
 const projectRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 
 test('login shell gates RPGJS startup and preserves guest and OAuth paths', async () => {
-  const [html, client, login, styles] = await Promise.all([
+  const [html, client, login, styles, contacts, menuInput] = await Promise.all([
     readFile(join(projectRoot, 'index.html'), 'utf8'),
     readFile(join(projectRoot, 'src', 'client.ts'), 'utf8'),
     readFile(join(projectRoot, 'src', 'login.ts'), 'utf8'),
     readFile(join(projectRoot, 'src', 'login.css'), 'utf8'),
+    readFile(join(projectRoot, 'src', 'contacts.ts'), 'utf8'),
+    readFile(join(projectRoot, 'src', 'menu-input.ts'), 'utf8'),
   ])
 
   assert.match(html, /id="login-root"/)
@@ -25,4 +27,11 @@ test('login shell gates RPGJS startup and preserves guest and OAuth paths', asyn
   assert.match(login, /\/api\/oauth\/start/)
   assert.match(login, /integrationReady/)
   assert.match(styles, /@media \(max-width: 720px\)/)
+  assert.doesNotMatch(html, /class="controls-hint"/)
+  assert.match(menuInput, /操作按键/)
+  assert.match(menuInput, /WASD \/ 方向键/)
+  assert.match(html, /id="top-right-hud"/)
+  assert.match(styles, /\.top-right-hud \{[^}]*flex-direction: column/)
+  assert.match(styles, /\.top-right-hud \{[^}]*gap: 12px/)
+  assert.match(contacts, /querySelector<HTMLElement>\('#top-right-hud'\)/)
 })

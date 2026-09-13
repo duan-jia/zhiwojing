@@ -11,7 +11,8 @@ export function setupContacts(userId: number) {
   if (!root) return { destroy: () => undefined }
   const button = document.createElement('button')
   button.type = 'button'; button.className = 'contacts-hud'; button.innerHTML = '通讯录 <span hidden>0</span>'
-  document.body.append(button)
+  const hud = document.querySelector<HTMLElement>('#top-right-hud')
+  ;(hud ?? document.body).append(button)
   let contacts: Contact[] = []; let active: Contact | null = null; let timer = 0; let notice = ''
   const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
     const response = await fetch(`${API}${path}`, { credentials: 'include', ...init })

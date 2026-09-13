@@ -45,7 +45,7 @@ button:focus-visible {
   background: linear-gradient(180deg, transparent 35%, rgb(7 27 56 / 42%));
 }
 
-.contacts-hud { position: fixed; z-index: 30; top: 18px; right: 18px; min-height: 42px; padding: 8px 13px; border: 3px solid #17345f; color: #17345f; background: #fffdf2; box-shadow: 4px 4px #071b3866; cursor: pointer; font-weight: 900; }
+.contacts-hud { min-height: 42px; padding: 8px 13px; border: 3px solid #17345f; color: #17345f; background: #fffdf2; box-shadow: 4px 4px #071b3866; cursor: pointer; font-weight: 900; pointer-events: auto; }
 .contacts-hud span, .contact-row b { display: inline-grid; min-width: 20px; height: 20px; place-items: center; border-radius: 10px; color: white; background: #f25b36; font-size: 10px; }
 .contacts-panel { width: min(820px, 100%); height: min(620px, 82vh); overflow: hidden; border: 4px solid #17345f; background: #fffdf2; box-shadow: 8px 8px #071b3866; }
 .contacts-panel > header { display: flex; align-items: center; padding: 12px 15px; border-bottom: 3px solid #17345f; background: #e9f4ff; }
@@ -286,11 +286,19 @@ button:focus-visible {
   background: #1772f6ee;
 }
 
-.autonomy-mode {
+.top-right-hud {
   position: fixed;
   z-index: 30;
   top: 18px;
   right: 18px;
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.autonomy-mode {
   display: flex;
   min-width: 154px;
   align-items: center;
@@ -324,6 +332,38 @@ button:focus-visible {
 .autonomy-mode--human .autonomy-mode__dot { background: #1772f6; }
 .autonomy-mode--degraded .autonomy-mode__dot { background: #e6a23c; }
 .autonomy-mode--offline .autonomy-mode__dot { background: #d95050; }
+
+.rpg-ui-control-hints {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.rpg-ui-control-hint {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--rpg-ui-border);
+  border-radius: var(--rpg-ui-radius-sm);
+  background: rgb(0 0 0 / 25%);
+  color: var(--rpg-ui-text);
+  font-size: var(--rpg-ui-font-size-sm);
+}
+
+.rpg-ui-control-hint kbd {
+  min-width: 72px;
+  padding: 4px 7px;
+  border: 1px solid color-mix(in srgb, var(--rpg-ui-accent), transparent 45%);
+  border-radius: 4px;
+  background: rgb(0 0 0 / 35%);
+  color: var(--rpg-ui-accent);
+  font: 700 11px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
+  text-align: center;
+  white-space: nowrap;
+}
 
 .world-connection {
   position: fixed;
@@ -689,7 +729,9 @@ button:focus-visible {
   .chat-form { padding: 10px 11px 7px; }
   .chat-submit { min-width: 64px; }
   .interaction-hud { bottom: 62px; max-width: calc(100% - 20px); white-space: nowrap; }
-  .autonomy-mode { top: 10px; right: 10px; min-width: 140px; padding: 7px 9px; }
+  .top-right-hud { top: 10px; right: 10px; gap: 10px; }
+  .autonomy-mode { min-width: 140px; padding: 7px 9px; }
+  .rpg-ui-control-hints { grid-template-columns: 1fr; }
   .identity-options { grid-template-columns: 1fr; }
   .identity-option { flex-direction: row; justify-content: space-between; }
 }
