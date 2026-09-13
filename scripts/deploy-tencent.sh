@@ -47,6 +47,16 @@ fi
 
 [[ -d "${backend_dir}" && -d "${frontend_dir}" ]] || { echo "脚本必须在项目仓库内运行。" >&2; exit 1; }
 
+# @rpgjs/client is tracked as a Git submodule. A plain clone leaves it empty.
+if [[ -f "${repo_dir}/.gitmodules" ]] && command -v git >/dev/null; then
+  echo "初始化 RPGJS 客户端子模块……"
+  git -C "${repo_dir}" submodule update --init --recursive
+fi
+[[ -f "${frontend_dir}/vendor/@rpgjs/client/package.json" ]] || {
+  echo "缺少 frontend/vendor/@rpgjs/client；请确认 Git 子模块已初始化。" >&2
+  exit 1
+}
+
 if [[ ! -x "${backend_dir}/.venv/bin/uvicorn" ]]; then
   python3 -m venv "${backend_dir}/.venv"
   "${backend_dir}/.venv/bin/pip" install -r "${backend_dir}/requirements.txt"
