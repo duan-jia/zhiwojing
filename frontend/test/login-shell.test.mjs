@@ -42,3 +42,27 @@ test('login shell gates RPGJS startup and preserves guest and OAuth paths', asyn
   assert.match(styles, /\.top-right-hud \{[^}]*gap: 12px/)
   assert.match(contacts, /querySelector<HTMLElement>\('#top-right-hud'\)/)
 })
+
+test('lightweight panels explicitly override the RPG UI reset text color', async () => {
+  const styles = await readFile(join(projectRoot, 'src', 'login.css'), 'utf8')
+  const expectDarkText = (selector) => {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    assert.match(styles, new RegExp(`${escaped}\\s*\\{[^}]*color:\\s*#(?:172033|17345f)`, 's'))
+  }
+
+  [
+    '.contacts-panel',
+    '.contact-row',
+    '.contact-status',
+    '.thread-messages p',
+    '.thread-form input',
+    '.landmark-panel',
+    '.landmark-content',
+    '.persona-card',
+    '.persona-card span',
+    '.persona-refresh',
+    '.chat-panel',
+  ].forEach(expectDarkText)
+
+  assert.match(styles, /\.thread-messages \.mine p\s*\{[^}]*color:\s*#fff[^}]*background:\s*#1772f6/s)
+})

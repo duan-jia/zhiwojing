@@ -47,20 +47,20 @@ button:focus-visible {
 
 .contacts-hud { min-height: 42px; padding: 8px 13px; border: 3px solid #17345f; color: #17345f; background: #fffdf2; box-shadow: 4px 4px #071b3866; cursor: pointer; font-weight: 900; pointer-events: auto; }
 .contacts-hud span, .contact-row b { display: inline-grid; min-width: 20px; height: 20px; place-items: center; border-radius: 10px; color: white; background: #f25b36; font-size: 10px; }
-.contacts-panel { width: min(820px, 100%); height: min(620px, 82vh); overflow: hidden; border: 4px solid #17345f; background: #fffdf2; box-shadow: 8px 8px #071b3866; }
+.contacts-panel { width: min(820px, 100%); height: min(620px, 82vh); overflow: hidden; border: 4px solid #17345f; color: #172033; background: #fffdf2; box-shadow: 8px 8px #071b3866; }
 .contacts-panel > header { display: flex; align-items: center; padding: 12px 15px; border-bottom: 3px solid #17345f; background: #e9f4ff; }
 .contacts-panel h2 { margin: 0; font-size: 17px; }
 .contacts-close { margin-left: auto; border: 0; color: #3c506b; background: transparent; cursor: pointer; font-size: 26px; }
 .contacts-layout { display: grid; grid-template-columns: minmax(190px, 34%) 1fr; height: calc(100% - 57px); }
 .contacts-layout nav { overflow-y: auto; border-right: 3px solid #17345f; background: #f4f8ed; }
-.contact-row { display: grid; width: 100%; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 12px; border: 0; border-bottom: 2px solid #c9dcf0; background: transparent; cursor: pointer; text-align: left; }
+.contact-row { display: grid; width: 100%; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 12px; border: 0; border-bottom: 2px solid #c9dcf0; color: #172033; background: transparent; cursor: pointer; text-align: left; }
 .contact-row:hover, .contact-row.active { background: #e9f4ff; }
 .contact-row i { width: 9px; height: 9px; border: 2px solid #65758a; border-radius: 50%; background: #fff; }.contact-row i.online { border-color: #14753c; background: #35bf68; }
 .contact-row span, .thread-title span { display: flex; min-width: 0; flex-direction: column; }.contact-row small { overflow: hidden; color: #65758a; text-overflow: ellipsis; white-space: nowrap; }
 .contacts-layout main { display: flex; min-width: 0; flex-direction: column; overflow: hidden; }
-.thread-title { display: flex; align-items: center; padding: 12px; border-bottom: 2px solid #17345f; }.thread-title small { color: #65758a; }.contact-status { margin-left: auto; border: 2px solid #17345f; background: #fff; cursor: pointer; }
-.thread-messages { display: flex; flex: 1; flex-direction: column; gap: 8px; overflow-y: auto; padding: 14px; }.thread-messages article { align-self: flex-start; max-width: 78%; }.thread-messages article.mine { align-self: flex-end; text-align: right; }.thread-messages p { margin: 2px 0; padding: 8px 10px; border: 2px solid #17345f; background: #fff; }.thread-messages .mine p { color: #fff; background: #1772f6; }
-.thread-form { display: flex; gap: 8px; padding: 12px; border-top: 2px solid #17345f; }.thread-form input { min-width: 0; flex: 1; padding: 9px; border: 2px solid #17345f; }.thread-form button { border: 2px solid #17345f; color: #fff; background: #1772f6; }.thread-notice { margin: 0 12px; padding: 7px; color: #8b3d12; background: #fff0bd; font-size: 11px; }.contacts-empty { padding: 18px; color: #65758a; font-size: 12px; }.thread-placeholder { margin: auto; }
+.thread-title { display: flex; align-items: center; padding: 12px; border-bottom: 2px solid #17345f; }.thread-title small { color: #65758a; }.contact-status { margin-left: auto; border: 2px solid #17345f; color: #172033; background: #fff; cursor: pointer; }
+.thread-messages { display: flex; flex: 1; flex-direction: column; gap: 8px; overflow-y: auto; padding: 14px; }.thread-messages article { align-self: flex-start; max-width: 78%; }.thread-messages article.mine { align-self: flex-end; text-align: right; }.thread-messages p { margin: 2px 0; padding: 8px 10px; border: 2px solid #17345f; color: #172033; background: #fff; }.thread-messages .mine p { color: #fff; background: #1772f6; }
+.thread-form { display: flex; gap: 8px; padding: 12px; border-top: 2px solid #17345f; }.thread-form input { min-width: 0; flex: 1; padding: 9px; border: 2px solid #17345f; color: #172033; background: #fff; }.thread-form button { border: 2px solid #17345f; color: #fff; background: #1772f6; }.thread-notice { margin: 0 12px; padding: 7px; color: #8b3d12; background: #fff0bd; font-size: 11px; }.contacts-empty { padding: 18px; color: #65758a; font-size: 12px; }.thread-placeholder { margin: auto; }
 @media (max-width: 620px) { #contacts-root { padding: 8px; }.contacts-layout { grid-template-columns: 120px minmax(0, 1fr); }.contact-row { padding: 9px 6px; }.contact-row small { max-width: 80px; }.contacts-panel { height: 88vh; }.thread-messages article { max-width: 94%; } }
 
 .landmark-panel {
@@ -68,6 +68,7 @@ button:focus-visible {
   max-height: min(78vh, 680px);
   overflow: hidden;
   border: 4px solid #17345f;
+  color: #172033;
   background: #fffdf2;
   box-shadow: 8px 8px 0 #071b3866, inset 0 0 0 3px #c9dcf0;
 }
@@ -81,7 +82,7 @@ button:focus-visible {
   border: 3px solid #17345f; color: #fff; background: #f25b36; box-shadow: inset -4px -4px #bd351e;
   font-weight: 900;
 }
-.landmark-content { max-height: min(58vh, 520px); overflow-y: auto; padding: 14px; background: #f4f8ed; }
+.landmark-content { max-height: min(58vh, 520px); overflow-y: auto; padding: 14px; color: #172033; background: #f4f8ed; }
 .landmark-status { margin: 32px; color: #65758a; text-align: center; }
 .landmark-status--error { color: #9b302c; }
 .hot-list { display: grid; gap: 10px; }
@@ -99,10 +100,10 @@ button:focus-visible {
 .hot-copy strong { font-size: 13px; line-height: 1.4; }
 .hot-copy small { display: -webkit-box; overflow: hidden; color: #65758a; font-size: 10px; line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .home-tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; padding: 10px 14px; border-bottom: 2px solid #17345f; background: #e9f4ff; }
-.persona-card { overflow-wrap: anywhere; }
+.persona-card { color: #172033; overflow-wrap: anywhere; }
 .persona-card div { margin: 12px 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.persona-card span { background: #d7ebff; border: 1px solid #17345f; padding: 3px 7px; border-radius: 3px; }
-.persona-refresh { border: 2px solid #17345f; background: #ffdc69; padding: 7px 14px; font: inherit; cursor: pointer; }
+.persona-card span { color: #172033; background: #d7ebff; border: 1px solid #17345f; padding: 3px 7px; border-radius: 3px; }
+.persona-refresh { border: 2px solid #17345f; color: #172033; background: #ffdc69; padding: 7px 14px; font: inherit; cursor: pointer; }
 @media (max-width: 560px) { .home-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .home-tab { min-height: 38px; border: 2px solid #17345f; color: #17345f; background: #fff; cursor: pointer; font-size: 11px; font-weight: 700; transition: transform .2s, background .2s; }
 .home-tab:hover, .home-tab--active { color: #fff; background: #1772f6; transform: translateY(-1px); }
@@ -125,6 +126,7 @@ button:focus-visible {
   width: min(680px, 100%);
   overflow: hidden;
   border: 4px solid #17345f;
+  color: #172033;
   background: #fffdf2;
   box-shadow: 8px 8px 0 #071b3866, inset 0 0 0 3px #c9dcf0;
 }
