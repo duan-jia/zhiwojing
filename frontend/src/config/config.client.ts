@@ -11,6 +11,8 @@ import { actionBattleOptions } from '../modules/main/combat'
 import { setupCombatInput } from '../combat-input'
 import { setupCombatHud } from '../combat-hud'
 import { setupMenuInput } from '../menu-input'
+import { RemotePlayerHealth } from '../remote-player-health'
+import { withCombatAnimationAliases } from '../combat-animation-logic'
 
 let bubbleController: ReturnType<typeof setupAgentBubbles> | null = null
 let dialogueController: ReturnType<typeof setupDialogueInteractions> | null = null
@@ -50,6 +52,7 @@ export default {
             autonomyStatusController?.setConnected(false)
           },
           onStart(engine) {
+            engine.addSpriteComponentInFront(RemotePlayerHealth)
             menuInputController?.destroy()
             menuInputController = setupMenuInput(engine)
             autonomyInputController?.destroy()
@@ -90,12 +93,12 @@ export default {
           {
             id: 'hero',
             image: 'spritesheets/hero.png',
-            ...Presets.RMSpritesheet(3, 4)
+            ...withCombatAnimationAliases(Presets.RMSpritesheet(3, 4))
           },
           {
             id: 'female',
             image: 'spritesheets/female.png',
-             ...Presets.RMSpritesheet(3, 4)
+             ...withCombatAnimationAliases(Presets.RMSpritesheet(3, 4))
           }
         ]
       }

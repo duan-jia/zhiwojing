@@ -67,6 +67,9 @@ export function setupE2eTelemetry(engine: any) {
           agentMode: Boolean(read(player?.agentMode)),
           agentState: String(read(player?.agentState) ?? ''),
           isConnected: Boolean(read(player?.isConnected)),
+          hp: Number(read(player?.hpSignal ?? player?.hp)),
+          defeated: Boolean(read(player?.defeated)),
+          animationName: String(read(player?.animationName) ?? ''),
         }])),
       }
     },
