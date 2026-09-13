@@ -51,7 +51,9 @@ class MemoryTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(main,"build_mem0",side_effect=ModuleNotFoundError("mem0")):
             with self.assertLogs("app.main",level="ERROR") as logs:
                 runtime=main._build_agent_runtime()
-        self.assertIsNone(runtime.memory_service)
+        self.assertIsNotNone(runtime.memory_service)
+        self.assertFalse(runtime.memory_service.enabled)
+        self.assertIs(runtime.memory_service.store,main.communication_store)
         self.assertIn("continuing without memory",logs.output[0])
     def test_injection_limit(self):
         self.backend.add("x"*1500,user_id="pair:1-2")

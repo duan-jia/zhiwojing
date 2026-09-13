@@ -1,5 +1,12 @@
 # 项目状态
 
+## 远程通讯（2026-09）
+
+- 完成分身对话后双方会幂等加入通讯录；删除联系人会同时从双方列表移除。再次在世界相遇并对话后会自动重新建立联系人，既有记忆与消息历史保留。
+- `contacts`、`messages` 与 `presence` 保存联系人、会话/未读和在线操控状态。HUD 每约 5 秒刷新。
+- 在线真人接收消息时不自动回复；离线或挂机时由分身使用 pair memory 回复。`REMOTE_AGENT_REPLY_LIMIT` 默认 `5`，只有真人回复会重置对应方向计数。
+- 协议见 [`REMOTE_COMMUNICATION.md`](REMOTE_COMMUNICATION.md)。
+
 ## 当前架构
 
 ```text

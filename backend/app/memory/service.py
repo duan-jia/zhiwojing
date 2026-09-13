@@ -32,6 +32,8 @@ class MemoryService:
         if not nearby:return ""
         return "\n".join(self._search("上次见面和共同经历",pair_scope(avatar_id,int(nearby[0]["avatar_id"])),5))[:self.max_chars]
     async def conclude_pair(self,llm,*,a:int,b:int,conversation_id:str,user_message:str,reply:str,place:str=""):
+        # Contacts are product state, not an optional semantic-memory feature.
+        self.store.ensure_contacts(a,b)
         if not self.enabled:return
         key=hashlib.sha256(f"pair|{conversation_id}|{user_message}|{reply}".encode()).hexdigest()
         if self.store.has_episode(key):return

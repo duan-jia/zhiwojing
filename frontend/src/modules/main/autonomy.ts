@@ -14,6 +14,11 @@ const MEETING_DISTANCE = 2
 const ARRIVAL_DISTANCE_PX = 24
 const API_URL = (typeof process !== 'undefined' && process.env.AVATAR_API_URL) || 'http://127.0.0.1:8000'
 
+function reportPresence(player: AgentPlayer, humanControlled: boolean) {
+  void post('/api/presence', { user_id: value(player.avatarId), online: true, human_controlled: humanControlled })
+    .catch(error => console.warn('presence update failed', error))
+}
+
 type AgentAction =
   | { action: 'move'; to: { x: number; y: number; name: string } }
   | { action: 'say'; text: string }
@@ -199,12 +204,14 @@ export async function advanceAgent(player: AgentPlayer, event: 'enabled' | 'arri
 
 export function enableAgent(player: AgentPlayer) {
   player.agentMode.set(true)
+  reportPresence(player, false)
   scheduleMeetingCheck(player)
   void advanceAgent(player, 'enabled')
 }
 
 export function takeControl(player: AgentPlayer) {
   player.agentMode.set(false)
+  reportPresence(player, true)
   player.stopMoveTo()
   const state = states.get(String(player.id))
   if (state) {
