@@ -62,3 +62,9 @@ FastAPI 不再持有地图、房间、角色位置或 WebSocket 移动状态；`
 ## 两级长期记忆
 
 FastAPI 已接入可关闭、可降级的 Mem0 长期记忆：主人私有 `avatar:{id}` 与双方共享 `pair:{min}-{max}` 严格隔离；meeting 会话逐轮总结，主人会话每 6 条消息提取事实/偏好/待办。关系、episode 与 profile 同步落入 avatar.db，LangGraph checkpoint 改为 `MEMORY_DATA_DIR` 下的 SQLite。详见 [MEMORY.md](./MEMORY.md)。
+
+## 2026-09 人设冷启动
+
+- 新增独立 persona_cards 结构化存储及知乎数据冷启动 API。
+- 人设要点注入 chat/step；知我居新增可生成、刷新的人设入口。
+- 关注数据仅用于兴趣抽取，不播种 relationships/contacts。

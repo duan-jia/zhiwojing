@@ -16,6 +16,7 @@ from sqlmodel import Field, Session, SQLModel, create_engine, select
 from .agent import AgentRuntimeError, AvatarAgentRuntime
 from .memory import MemoryConfig, MemoryService, StructuredStore, build_mem0
 from .memory.store import Contact, Message, Presence
+from .memory.coldstart import persona_prompt, run_coldstart
 from .zhihu import CapabilityError, ToolContext, build_tool_registry
 from .zhihu.http_provider import HttpZhihuProvider
 from .zhihu.models import (
@@ -62,6 +63,9 @@ class AgentChatResponse(BaseModel):
     conversation_id: str
     avatar_id: int
     response: str
+
+class ColdstartRequest(BaseModel):
+    user_id: int
 
 
 class AgentPosition(BaseModel):
@@ -297,6 +301,7 @@ async def agent_chat(payload: AgentChatRequest):
             "bio": avatar.bio,
             "interests": avatar.interests,
             "style": avatar.style,
+            "persona_card": persona_prompt(communication_store.get_persona(payload.avatar_id)),
         }
     conversation_id = payload.conversation_id or f"{payload.user_id}:{payload.avatar_id}"
     try:
@@ -325,6 +330,7 @@ async def agent_chat(payload: AgentChatRequest):
 
 @app.post("/api/agent/step", response_model=AgentStepResponse)
 async def agent_step(payload: AgentStepRequest):
+    card = communication_store.get_persona(payload.avatar_id) or {}
     try:
         decision = await agent_runtime.step(
             avatar_id=payload.avatar_id,
@@ -333,10 +339,30 @@ async def agent_step(payload: AgentStepRequest):
             nearby=[item.model_dump() for item in payload.nearby],
             persona=payload.persona,
             last_action=payload.last_action,
+            persona_summary=str(card.get("summary", "")),
         )
     except AgentRuntimeError as error:
         raise HTTPException(error.status_code, detail={"code": error.code, "message": error.message, "retryable": error.retryable}) from error
     return AgentStepResponse(**decision)
+
+@app.get("/api/persona")
+async def get_persona(user_id: int = 1):
+    persona = communication_store.get_persona(user_id)
+    if persona is None:
+        raise HTTPException(404, detail={"code": "PERSONA_NOT_FOUND", "message": "尚未生成人设卡。"})
+    return persona
+
+@app.post("/api/memory/coldstart")
+async def memory_coldstart(payload: ColdstartRequest):
+    with Session(engine) as session:
+        if not session.get(User, payload.user_id):
+            raise HTTPException(404, detail={"code": "USER_NOT_FOUND", "message": "用户不存在"})
+    try:
+        return await run_coldstart(payload.user_id, user_zhihu_provider, communication_store)
+    except CapabilityError as error:
+        raise HTTPException(error.status_code, detail={"code": error.code, "message": error.message, "retryable": error.retryable}) from error
+    except AgentRuntimeError as error:
+        raise HTTPException(error.status_code, detail={"code": error.code, "message": error.message, "retryable": error.retryable}) from error
 
 
 @app.post("/api/agent/init", response_model=AgentStubResponse, status_code=501)

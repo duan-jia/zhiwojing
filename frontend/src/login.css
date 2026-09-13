@@ -98,7 +98,12 @@ button:focus-visible {
 .hot-copy { display: flex; min-width: 0; flex-direction: column; gap: 5px; }
 .hot-copy strong { font-size: 13px; line-height: 1.4; }
 .hot-copy small { display: -webkit-box; overflow: hidden; color: #65758a; font-size: 10px; line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.home-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 10px 14px; border-bottom: 2px solid #17345f; background: #e9f4ff; }
+.home-tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; padding: 10px 14px; border-bottom: 2px solid #17345f; background: #e9f4ff; }
+.persona-card { overflow-wrap: anywhere; }
+.persona-card div { margin: 12px 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.persona-card span { background: #d7ebff; border: 1px solid #17345f; padding: 3px 7px; border-radius: 3px; }
+.persona-refresh { border: 2px solid #17345f; background: #ffdc69; padding: 7px 14px; font: inherit; cursor: pointer; }
+@media (max-width: 560px) { .home-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .home-tab { min-height: 38px; border: 2px solid #17345f; color: #17345f; background: #fff; cursor: pointer; font-size: 11px; font-weight: 700; transition: transform .2s, background .2s; }
 .home-tab:hover, .home-tab--active { color: #fff; background: #1772f6; transform: translateY(-1px); }
 .landmark-content h3 { margin: 12px 0 8px; color: #17345f; font-size: 13px; }

@@ -23,6 +23,13 @@ class Relationship(SQLModel, table=True):
     tags_json: str = "[]"
     last_met_at: datetime = Field(default_factory=utcnow, index=True)
 
+class PersonaCard(SQLModel, table=True):
+    __tablename__ = "persona_cards"
+    avatar_id: int = Field(primary_key=True)
+    persona_json: str = "{}"
+    sources_json: str = "{}"
+    generated_at: datetime = Field(default_factory=utcnow)
+
 class Episode(SQLModel, table=True):
     __tablename__ = "episodes"
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -91,3 +98,20 @@ class StructuredStore:
                 row=s.exec(select(Contact).where(Contact.user_id==owner, Contact.contact_id==partner)).first()
                 if row is None: s.add(Contact(user_id=owner, contact_id=partner))
             s.commit()
+
+    def get_persona(self, avatar_id: int) -> dict | None:
+        with Session(self.engine) as s:
+            row = s.get(PersonaCard, avatar_id)
+            return json.loads(row.persona_json) if row else None
+
+    def upsert_persona(self, avatar_id: int, persona: dict, sources: dict) -> None:
+        with Session(self.engine) as s:
+            row = s.get(PersonaCard, avatar_id)
+            if row is None:
+                row = PersonaCard(avatar_id=avatar_id)
+                s.add(row)
+            row.persona_json = json.dumps(persona, ensure_ascii=False)
+            row.sources_json = json.dumps(sources, ensure_ascii=False)
+            row.generated_at = utcnow()
+            s.commit()
+
