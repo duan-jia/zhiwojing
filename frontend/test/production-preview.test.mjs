@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build, preview } from 'vite'
+import { TOWN_BUILDINGS } from '../src/town-layout.mjs'
 
 const projectRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const configFile = join(projectRoot, 'vite.config.ts')
@@ -80,6 +81,17 @@ test('production previews serve maps and the UI theme at root and subpath', asyn
         const mapResponse = await fetch(new URL(`${variant.route}map/${fileName}`, origin))
         assert.equal(mapResponse.status, 200, `${variant.name} ${fileName} status`)
         assert.match(await mapResponse.text(), /<map\b/)
+      }
+
+      for (const building of TOWN_BUILDINGS) {
+        const response = await fetch(new URL(`${variant.route}spritesheets/${building.image}`, origin))
+        assert.equal(response.status, 200, `${variant.name} ${building.name} image`)
+        const bytes = new Uint8Array(await response.arrayBuffer())
+        assert.equal(bytes[25], 6, `${building.name} RGBA source`)
+      }
+      for (const file of ['town-collision.tsx', 'town-collision.svg']) {
+        const response = await fetch(new URL(`${variant.route}map/${file}`, origin))
+        assert.equal(response.status, 200, `${variant.name} ${file}`)
       }
 
       const localStylesheets = stylesheetUrls(builtHtml, indexUrl)

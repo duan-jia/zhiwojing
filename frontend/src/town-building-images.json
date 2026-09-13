@@ -1,0 +1,62 @@
+{
+  "zhihuhome-cutout.png": {
+    "width": 1254,
+    "height": 1254,
+    "bounds": [
+      200,
+      103,
+      1087,
+      1166
+    ]
+  },
+  "zhihuhot-cutout.png": {
+    "width": 1254,
+    "height": 1254,
+    "bounds": [
+      215,
+      158,
+      1095,
+      1140
+    ]
+  },
+  "zhihubook.png": {
+    "width": 1312,
+    "height": 1199,
+    "bounds": [
+      77,
+      28,
+      1238,
+      1180
+    ]
+  },
+  "zhihuwendao.png": {
+    "width": 1374,
+    "height": 1145,
+    "bounds": [
+      119,
+      124,
+      1269,
+      1038
+    ]
+  },
+  "zhihuwrite.png": {
+    "width": 1376,
+    "height": 1143,
+    "bounds": [
+      171,
+      111,
+      1229,
+      1063
+    ]
+  },
+  "zhihutiangong.png": {
+    "width": 1374,
+    "height": 1145,
+    "bounds": [
+      87,
+      80,
+      1312,
+      1059
+    ]
+  }
+}

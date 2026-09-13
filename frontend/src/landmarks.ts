@@ -10,8 +10,8 @@ export interface LandmarkDefinition {
 
 /** World landmarks are data-driven so future places can share interaction/UI code. */
 export const LANDMARKS: readonly LandmarkDefinition[] = [
-  { id: 'landmark-hot-square', name: '热榜广场', x: 928, y: 704, kind: 'hot-square' },
-  { id: 'landmark-user-home', name: '知我居', x: 448, y: 480, kind: 'user-home' },
+  { id: 'landmark-hot-square', name: '热榜广场', x: 928, y: 608, kind: 'hot-square' },
+  { id: 'landmark-user-home', name: '知我居', x: 448, y: 544, kind: 'user-home' },
 ]
 
 export function landmarkForId(id: string): LandmarkDefinition | null {

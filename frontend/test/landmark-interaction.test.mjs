@@ -18,12 +18,12 @@ async function loadTypeScriptModule(relativePath) {
 test('landmark registry exposes hot square close to the spawn', async () => {
   const { LANDMARKS, landmarkForId } = await loadTypeScriptModule('src/landmarks.ts')
   assert.deepEqual(LANDMARKS[0], {
-    id: 'landmark-hot-square', name: '热榜广场', x: 928, y: 704, kind: 'hot-square'
+    id: 'landmark-hot-square', name: '热榜广场', x: 928, y: 608, kind: 'hot-square'
   })
   assert.equal(landmarkForId('landmark-hot-square').kind, 'hot-square')
   assert.equal(landmarkForId('missing'), null)
   assert.deepEqual(LANDMARKS[1], {
-    id: 'landmark-user-home', name: '知我居', x: 448, y: 480, kind: 'user-home'
+    id: 'landmark-user-home', name: '知我居', x: 448, y: 544, kind: 'user-home'
   })
 })
 
@@ -48,7 +48,7 @@ test('landmark interaction and panel use the shared two-tile range', async () =>
   assert.match(panel, /\/api\/zhihu\/user\/favlists/)
   assert.match(html, /id="landmark-root"/)
   assert.match(server, /id: 'landmark-hot-square'/)
-  assert.match(server, /setGraphic\('landmark-hot'\)/)
   assert.match(server, /id: 'landmark-user-home'/)
-  assert.match(server, /setGraphic\('landmark-home'\)/)
+  assert.doesNotMatch(server, /setGraphic\('landmark-(?:hot|home)'\)/)
+  assert.equal((server.match(/this\.setHitbox\(1, 1\)/g) ?? []).length >= 3, true)
 })

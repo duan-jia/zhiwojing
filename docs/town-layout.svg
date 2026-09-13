@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="864" viewBox="0 0 1024 864">
+ <rect width="1024" height="864" fill="#f6f3e9"/>
+ <g font-family="sans-serif" fill="#263d35">
+  <text x="48" y="44" font-size="26" font-weight="bold">知我境 · 六栋建筑布局方案</text>
+  <text x="48" y="73" font-size="15">64 × 48 格 · 上北下南 · 预留框示意，尚未实装建筑图片</text>
+ </g>
+ <svg x="32" y="96" width="960" height="720" viewBox="0 0 640 480">
+  <rect width="640" height="480" rx="12" fill="#8bbcc8"/>
+  <rect x="20" y="20" width="600" height="440" rx="12" fill="#ccd9ac"/>
+  <path d="M55 245H585 M290 55V270 M215 245V415H385V245 M75 415H565" fill="none" stroke="#e6d7b5" stroke-width="30" stroke-linejoin="round"/>
+  <rect x="230" y="190" width="130" height="90" rx="8" fill="#eadfc9"/>
+  <path d="M145 160V245 M295 180V245 M475 170V245 M145 360V415 M315 400V415 M485 360V415" fill="none" stroke="#e6d7b5" stroke-width="20"/>
+  <g fill="#698a50" stroke="#577a43" stroke-width="3">
+   <circle cx="60" cy="65" r="14"/><circle cx="85" cy="50" r="14"/><circle cx="190" cy="60" r="14"/>
+   <circle cx="390" cy="60" r="14"/><circle cx="550" cy="60" r="14"/><circle cx="578" cy="85" r="14"/>
+   <circle cx="62" cy="150" r="14"/><circle cx="78" cy="180" r="14"/><circle cx="570" cy="180" r="14"/>
+   <circle cx="60" cy="310" r="14"/><circle cx="70" cy="350" r="14"/><circle cx="575" cy="325" r="14"/>
+   <circle cx="565" cy="367" r="14"/><circle cx="185" cy="445" r="10"/><circle cx="430" cy="445" r="10"/>
+  </g>
+  <g stroke-width="2" font-family="sans-serif" text-anchor="middle">
+   <g fill="#f0dec4" stroke="#a37d55"><rect x="100" y="90" width="90" height="70" rx="6"/></g>
+   <g fill="#c4def0" stroke="#417aa6"><rect x="250" y="100" width="90" height="80" rx="6"/></g>
+   <g fill="#d9d2ed" stroke="#83739d"><rect x="420" y="80" width="100" height="90" rx="6"/></g>
+   <g fill="#d6e8d8" stroke="#739979"><rect x="100" y="280" width="90" height="80" rx="6"/></g>
+   <g fill="#efdab5" stroke="#b39155"><rect x="430" y="280" width="100" height="80" rx="6"/></g>
+   <g fill="#d9dee1" stroke="#7d8991"><rect x="260" y="320" width="100" height="80" rx="6"/></g>
+   <g fill="#293e39" stroke="none" font-size="16" font-weight="bold">
+    <text x="145" y="122">知我居</text><text x="295" y="136">知乎热榜</text><text x="470" y="121">藏书阁</text>
+    <text x="145" y="316">问道馆</text><text x="480" y="316">创作坊</text><text x="310" y="356">天工坊</text>
+   </g>
+   <g fill="#53625a" stroke="none" font-size="10">
+    <text x="145" y="143">分身 · 人设</text><text x="295" y="157">公共热点</text><text x="470" y="142">搜索 · 知识库</text>
+    <text x="145" y="337">提问 · 直答</text><text x="480" y="337">选题 · 草稿</text><text x="310" y="377">PDF · PPT</text>
+    <text x="295" y="218">中央广场</text><text x="320" y="268">出生点</text>
+   </g>
+  </g>
+  <g fill="#9b6944"><rect x="138" y="157" width="14" height="6"/><rect x="288" y="177" width="14" height="6"/><rect x="468" y="167" width="14" height="6"/><rect x="138" y="357" width="14" height="6"/><rect x="478" y="357" width="14" height="6"/><rect x="308" y="397" width="14" height="6"/></g>
+  <circle cx="290" cy="260" r="5" fill="#397fac" stroke="white" stroke-width="2"/>
+ </svg>
+ <text x="48" y="844" font-family="sans-serif" font-size="15" fill="#53625a">棕色短线：建筑门口　浅色：道路与广场　绿色圆：树丛　外围蓝色：水域边界</text>
+</svg>

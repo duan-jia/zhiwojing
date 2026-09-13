@@ -56,6 +56,7 @@ export function setupE2eTelemetry(engine: any) {
         events: Object.fromEntries(Object.entries(read(scene?.events) ?? {}).map(([id, event]: [string, any]) => [id, {
           name: String(read(event?.name) ?? ''),
           x: Number(read(event?.x)), y: Number(read(event?.y)),
+          graphicBounds: read(event?.__rpgjsGraphicBounds),
         }])),
         movement: Object.fromEntries([...ranges].map(([id, range]) => [id, {
           ...range,

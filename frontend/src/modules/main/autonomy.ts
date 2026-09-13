@@ -13,11 +13,12 @@ export const TILE_SIZE = 32
 
 export const AGENT_LOCATIONS = [
   { id: 'square', name: '中央广场', x: 29, y: 24 },
-  { id: 'home', name: '知我居门前', x: 14, y: 17 },
-  { id: 'studio', name: '创作坊门前', x: 26, y: 15 },
-  { id: 'post', name: '邮局门前', x: 38, y: 17 },
-  { id: 'tea', name: '茶馆门前', x: 12, y: 27 },
-  { id: 'market', name: '集市门前', x: 40, y: 27 },
+  { id: 'home', name: '知我居门前', x: 14, y: 18 },
+  { id: 'hot', name: '知乎热榜门前', x: 29, y: 20 },
+  { id: 'book', name: '藏书阁门前', x: 47, y: 19 },
+  { id: 'wendao', name: '问道馆门前', x: 14, y: 37 },
+  { id: 'studio', name: '创作坊门前', x: 46, y: 37 },
+  { id: 'tiangong', name: '天工坊门前', x: 31, y: 41 },
 ] as const
 
 const MEETING_DISTANCE = 2

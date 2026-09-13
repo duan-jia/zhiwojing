@@ -12,6 +12,7 @@ import { setupCombatInput } from '../combat-input'
 import { setupCombatHud } from '../combat-hud'
 import { setupMenuInput } from '../menu-input'
 import { RemotePlayerHealth } from '../remote-player-health'
+import { townBuildingSprites } from '../town-building-sprites'
 import { withCombatAnimationAliases } from '../combat-animation-logic'
 import { applyCameraZoom, applyCameraZoomWhenReady } from '../camera'
 
@@ -83,16 +84,7 @@ export default {
           },
         },
         spritesheets: [
-          {
-            id: 'landmark-home',
-            image: 'spritesheets/landmark-home.svg',
-            ...Presets.RMSpritesheet(3, 4)
-          },
-          {
-            id: 'landmark-hot',
-            image: 'spritesheets/landmark-hot.svg',
-            ...Presets.RMSpritesheet(3, 4)
-          },
+          ...townBuildingSprites,
           {
             id: 'hero',
             image: 'spritesheets/hero.png',

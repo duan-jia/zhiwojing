@@ -1,6 +1,7 @@
 import { defineModule } from "@rpgjs/common";
 import { Move, RpgServer } from "@rpgjs/server";
 import { player } from './player.ts'
+import { TOWN_BUILDINGS } from '../../town-layout.mjs'
 
 export default defineModule<RpgServer>({
   player,
@@ -13,25 +14,43 @@ export default defineModule<RpgServer>({
   maps: [{
     id: 'nature-open-world',
     events: [
+      ...TOWN_BUILDINGS.map(building => ({
+        id: `town-building-${building.id}`,
+        x: building.centerX * 32,
+        y: building.bottomY * 32,
+        event: {
+          onInit() {
+            this.name = building.name
+            this.setGraphic(`town-building-${building.id}`)
+            // Tiled owns the building base collision, not this visual anchor.
+            this.setHitbox(1, 1)
+            this.through = true
+          },
+        },
+      })),
       {
         id: 'landmark-hot-square',
         x: 928,
-        y: 704,
+        y: 608,
         event: {
           onInit() {
             this.name = '◆ 热榜广场'
-            this.setGraphic('landmark-hot')
+            // Keep an invisible interaction anchor at the new building door.
+            this.setHitbox(1, 1)
+            this.through = true
           },
         },
       },
       {
         id: 'landmark-user-home',
         x: 448,
-        y: 480,
+        y: 544,
         event: {
           onInit() {
             this.name = '⌂ 知我居'
-            this.setGraphic('landmark-home')
+            // Keep an invisible interaction anchor at the new building door.
+            this.setHitbox(1, 1)
+            this.through = true
           },
         },
       },
