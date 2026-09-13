@@ -35,3 +35,11 @@ OpenAI embedding 与摘要复用 `LLM_BASE_URL`/`LLM_API_KEY`。任何记忆初�
 Mem0 及本地 embedding 的原生依赖采用惰性导入：即使未安装 `mem0ai`、`fastembed` 或 `onnxruntime`，关闭记忆或初始化失败时 API 仍可启动并维持无长期记忆的原行为。生产安装仍通过 `requirements.txt` 的固定版本获得完整能力。
 
 为保持 LangGraph 0.2 系列兼容性，相关依赖固定为 `langgraph==0.2.60`、`langchain-openai==0.2.14` 与 `langgraph-checkpoint-sqlite==2.0.11`（后者要求 `langgraph-checkpoint>=2.0.21,<3.0.0`）。记忆依赖继续固定为 `mem0ai==2.0.20`、`fastembed==0.8.0`、`onnxruntime==1.30.0`。
+
+## 知乎记忆冷启动与人设卡
+
+`POST /api/memory/coldstart` 接收 `{"user_id": 1}`，依次读取最多 30 条本人内容、20 个收藏夹、20 条收藏、50 个关注和创作统计，并只调用一次 LLM，抽取 `domains`、`style`、`viewpoints`、`interest_tags` 与 200 字以内的 `summary`。关注列表仅作为兴趣信号，不创建关系或联系人。
+
+结果幂等写入独立的 `persona_cards` 表；该结构化能力不依赖 mem0，也不受 `MEMORY_ENABLED` 影响。非法或缺字段的模型 JSON 会安全降级并返回 `partial: true`。知乎未配置返回 `503 / ZHIHU_NOT_CONFIGURED`，模型错误沿用 agent API 的可重试错误码。`GET /api/persona?user_id=1` 读取卡片。chat system prompt 注入约 300 字符要点，step observation 注入摘要，冷启动故障不阻断二者。
+
+当前由知我居“人设”页手动触发。知乎 OAuth 正式接入后，计划首次成功登录时异步触发，失败不影响登录。

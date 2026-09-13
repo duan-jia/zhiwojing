@@ -118,6 +118,7 @@ class AvatarAgentRuntime:
         bio: str,
         interests: str,
         style: str,
+        persona_card: str = "",
     ) -> str:
         names = OWNER_TOOLS if user_id == avatar_id else READ_ONLY_TOOLS
         memory_context = self.memory_service.context_for_chat(user_id, avatar_id, message) if self.memory_service else ""
@@ -126,6 +127,7 @@ class AvatarAgentRuntime:
             f"兴趣：{interests}。表达风格：{style}。"
             "请始终以这个人设和语气回答；需要外部信息时使用工具，不要虚构工具结果。"
             + (f"\n以下是经过权限过滤的记忆，仅用于帮助自然延续对话：\n{memory_context}" if memory_context else "")
+            + (f"\n{persona_card[:300]}" if persona_card else "")
         )
         arguments = {
             "checkpointer": self.checkpointer,
@@ -202,6 +204,7 @@ class AvatarAgentRuntime:
         nearby: list[dict[str, Any]],
         persona: str | None = None,
         last_action: str | None = None,
+        persona_summary: str = "",
     ) -> dict[str, Any]:
         """Choose one autonomous action for an event-driven world tick.
 
@@ -225,6 +228,7 @@ class AvatarAgentRuntime:
             "persona": persona or "真诚、好奇",
             "last_action": last_action,
             "pair_memory_hint": memory_hint or None,
+            "persona_summary": persona_summary[:200] or None,
         }
         try:
             reply = await create_llm().ainvoke(

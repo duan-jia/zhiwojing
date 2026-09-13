@@ -1,4 +1,5 @@
 import type { LandmarkDefinition } from './landmarks'
+import { personaError, personaView } from './persona-logic.mjs'
 
 interface HotItem {
   title: string
@@ -9,7 +10,7 @@ interface HotItem {
 
 interface HotResult { items: HotItem[] }
 interface PanelLifecycle { onOpen: () => void; onClose: () => void }
-type HomeTab = 'contents' | 'followees' | 'collections' | 'creator-stats'
+type HomeTab = 'contents' | 'followees' | 'collections' | 'creator-stats' | 'persona'
 interface UserItem { title?: string; fullname?: string; description?: string; excerpt?: string; contentType?: string; url?: string; avatarUrl?: string; isPublic?: boolean }
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -73,6 +74,7 @@ async function loadHotList(version: number): Promise<void> {
 const HOME_TABS: readonly { id: HomeTab; label: string }[] = [
   { id: 'contents', label: '我的内容' }, { id: 'followees', label: '我的关注' },
   { id: 'collections', label: '我的收藏' }, { id: 'creator-stats', label: '我的创作数据' },
+  { id: 'persona', label: '人设' },
 ]
 
 async function responseJson(path: string): Promise<Record<string, unknown>> {
@@ -105,18 +107,43 @@ async function loadHomeTab(tab: HomeTab, version: number): Promise<void> {
   renderStatus('正在整理你的知乎空间…')
   try {
     let html: string
-    if (tab === 'collections') {
+    if (tab === 'persona') {
+      const response = await fetch(`${API}/api/persona?user_id=1`, { credentials: 'include' })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(personaError(result, response.status))
+      const card = personaView(result)
+      html = `<section class="persona-card"><h3>我的人设卡</h3><p>${escapeHtml(card.summary || '暂无摘要')}</p><div><strong>领域</strong>${card.domains.map((x: string) => `<span>${escapeHtml(x)}</span>`).join('') || '<small>待发现</small>'}</div><div><strong>兴趣</strong>${card.tags.map((x: string) => `<span>${escapeHtml(x)}</span>`).join('') || '<small>待发现</small>'}</div><button type="button" class="persona-refresh">刷新人设</button></section>`
+    } else if (tab === 'collections') {
       const [collections, favlists] = await Promise.all([responseJson('/api/zhihu/user/collections'), responseJson('/api/zhihu/user/favlists')])
       html = `<h3>最近收藏</h3>${renderUserItems((collections.items as UserItem[]) || [], '暂时没有收藏内容。')}<h3>收藏夹</h3>${renderUserItems((favlists.items as UserItem[]) || [], '暂时没有收藏夹。')}`
     } else {
       const result = await responseJson(`/api/zhihu/user/${tab}`)
       html = tab === 'creator-stats' ? flattenStats(result) : renderUserItems((result.items as UserItem[]) || [], tab === 'contents' ? '暂时没有发布内容。' : '暂时没有关注用户。')
     }
-    if (version === requestVersion && activeLandmark?.kind === 'user-home') root()!.querySelector<HTMLElement>('.landmark-content')!.innerHTML = html
+    if (version === requestVersion && activeLandmark?.kind === 'user-home') {
+      root()!.querySelector<HTMLElement>('.landmark-content')!.innerHTML = html
+      root()!.querySelector<HTMLButtonElement>('.persona-refresh')?.addEventListener('click', () => void generatePersona())
+    }
   } catch (error) {
     if (version !== requestVersion || activeLandmark?.kind !== 'user-home') return
-    renderStatus(error instanceof Error ? error.message : '加载失败，请稍后重试。', true)
+    if (tab === 'persona') {
+      const content = root()?.querySelector<HTMLElement>('.landmark-content')
+      if (content) {
+        content.innerHTML = `<p class="landmark-status landmark-status--error" role="status">${escapeHtml(error instanceof Error ? error.message : '加载失败，请稍后重试。')}</p><button type="button" class="persona-refresh">生成/刷新人设</button>`
+        content.querySelector<HTMLButtonElement>('.persona-refresh')?.addEventListener('click', () => void generatePersona())
+      }
+    } else renderStatus(error instanceof Error ? error.message : '加载失败，请稍后重试。', true)
   }
+}
+
+async function generatePersona(): Promise<void> {
+  renderStatus('正在阅读你的知乎足迹并生成人设…')
+  try {
+    const response = await fetch(`${API}/api/memory/coldstart`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: 1 }) })
+    const body = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(personaError(body, response.status))
+    void loadHomeTab('persona', ++requestVersion)
+  } catch (error) { renderStatus(error instanceof Error ? error.message : '人设生成失败，请稍后重试。', true) }
 }
 
 function selectHomeTab(tab: HomeTab): void {
