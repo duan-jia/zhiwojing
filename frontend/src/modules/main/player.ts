@@ -4,6 +4,7 @@ import type {
     RpgPlayerHooks,
 } from '@rpgjs/server'
 import { enableAgent, takeControl, toggleAgent } from './autonomy'
+import { clearRespawnTimer, initializeCombatPlayer, revivePlayer } from './combat'
 
 const profiles = {
     1: { name: '体验用户', graphic: 'hero' },
@@ -33,6 +34,7 @@ export const player: RpgPlayerHooks = {
             $syncWithClient: true,
             $permanent: false,
         },
+        defeated: { $default: false, $syncWithClient: true, $permanent: false },
     },
     async onConnected(player: RpgPlayer) {
         player.name = '体验用户'
@@ -41,9 +43,12 @@ export const player: RpgPlayerHooks = {
         const actionPlayer = player as RpgPlayer & { on(event: string, callback: () => void): void }
         actionPlayer.on('agentToggle', () => toggleAgent(player as any))
         actionPlayer.on('takeControl', () => takeControl(player as any))
+        actionPlayer.on('revive', () => revivePlayer(player))
+        initializeCombatPlayer(player)
         enableAgent(player as any)
     },
     onDisconnected(player: RpgPlayer) {
+        clearRespawnTimer(player)
         const synchronizedPlayer = player as RpgPlayer & { avatarId: AvatarIdSignal }
         presence(synchronizedPlayer.avatarId(), false, false)
     },
