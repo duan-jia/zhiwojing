@@ -15,6 +15,7 @@ from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 from .agent import AgentRuntimeError, AvatarAgentRuntime
 from .memory import MemoryConfig, MemoryService, StructuredStore, build_mem0
+from .memory.store import Contact, Message, Presence
 from .zhihu import CapabilityError, ToolContext, build_tool_registry
 from .zhihu.http_provider import HttpZhihuProvider
 from .zhihu.models import (
@@ -103,6 +104,17 @@ class AgentStubResponse(BaseModel):
     status: Literal["not_implemented"] = "not_implemented"
     operation: Literal["chat", "step", "init"]
     message: str
+
+class PresenceRequest(BaseModel):
+    user_id: int
+    online: bool
+    human_controlled: bool
+
+class MessageSendRequest(BaseModel):
+    sender_id: int
+    recipient_id: int
+    content: str = Field(min_length=1, max_length=4000)
+    sender_kind: Literal["human", "agent"] = "human"
 
 class OAuthInterface(BaseModel):
     id: str
@@ -226,10 +238,10 @@ def _build_agent_runtime():
     try:
         config = MemoryConfig.from_env()
         if not config.enabled:
-            return AvatarAgentRuntime(tool_registry)
+            return AvatarAgentRuntime(tool_registry, memory_service=MemoryService(None, communication_store))
         config.data_dir.mkdir(parents=True, exist_ok=True)
         backend = build_mem0(config)
-        service = MemoryService(backend, StructuredStore(engine))
+        service = MemoryService(backend, communication_store)
         from langgraph.checkpoint.sqlite import SqliteSaver
         connection = sqlite3.connect(config.data_dir / "checkpoints.sqlite", check_same_thread=False)
         return AvatarAgentRuntime(tool_registry, memory_service=service, checkpointer=SqliteSaver(connection))
@@ -237,6 +249,7 @@ def _build_agent_runtime():
         logging.getLogger(__name__).exception("memory initialization failed; continuing without memory")
         return AvatarAgentRuntime(tool_registry)
 
+communication_store = StructuredStore(engine)
 agent_runtime = _build_agent_runtime()
 
 MOCK_AVATARS = (
@@ -247,6 +260,7 @@ MOCK_AVATARS = (
 
 @app.on_event("startup")
 def startup():
+    communication_store.engine = engine
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
         existing = set(session.exec(select(User.zhihu_id)).all())
@@ -337,6 +351,133 @@ async def me(user_id: int = 1):
         if not user:
             raise HTTPException(404, "用户不存在")
         return {"id": user.id, "name": user.name, "profile": {"interests": user.interests.split("、"), "style": user.style}}
+
+
+def _pair_key(a: int, b: int) -> str:
+    return f"{min(a, b)}:{max(a, b)}"
+
+
+def _reply_limit() -> int:
+    try:
+        return max(0, int(os.getenv("REMOTE_AGENT_REPLY_LIMIT", "5")))
+    except ValueError:
+        return 5
+
+
+@app.post("/api/presence")
+async def update_presence(payload: PresenceRequest):
+    with Session(engine) as session:
+        if not session.get(User, payload.user_id):
+            raise HTTPException(404, "用户不存在")
+        row = session.get(Presence, payload.user_id)
+        if row is None:
+            row = Presence(user_id=payload.user_id)
+            session.add(row)
+        row.online = payload.online
+        row.human_controlled = payload.human_controlled if payload.online else False
+        row.updated_at = datetime.now(timezone.utc)
+        session.commit()
+    return {"ok": True}
+
+
+@app.get("/api/contacts")
+async def list_contacts(user_id: int = 1):
+    with Session(engine) as session:
+        contacts = session.exec(select(Contact).where(Contact.user_id == user_id).order_by(Contact.added_at.desc())).all()
+        result = []
+        for contact in contacts:
+            user = session.get(User, contact.contact_id)
+            presence = session.get(Presence, contact.contact_id)
+            messages = session.exec(select(Message).where(Message.pair_key == _pair_key(user_id, contact.contact_id)).order_by(Message.created_at.desc()).limit(1)).all()
+            unread = len(session.exec(select(Message).where(Message.recipient_id == user_id, Message.sender_id == contact.contact_id, Message.read_at == None)).all())  # noqa: E711
+            result.append({
+                "id": contact.contact_id, "name": user.name if user else f"用户 {contact.contact_id}",
+                "status": contact.status, "online": bool(presence and presence.online),
+                "humanControlled": bool(presence and presence.online and presence.human_controlled),
+                "lastMessage": messages[0].content if messages else None, "unread": unread,
+                "agentReplyStreak": contact.agent_reply_streak,
+            })
+        return {"contacts": result, "unread": sum(item["unread"] for item in result)}
+
+
+@app.delete("/api/contacts/{contact_id}")
+async def remove_contact(contact_id: int, user_id: int = 1):
+    with Session(engine) as session:
+        row = session.exec(select(Contact).where(Contact.user_id == user_id, Contact.contact_id == contact_id)).first()
+        if row is None: raise HTTPException(404, "联系人不存在")
+        row.status = "removed"; session.add(row); session.commit()
+    return {"ok": True}
+
+
+@app.post("/api/contacts/{contact_id}/restore")
+async def restore_contact(contact_id: int, user_id: int = 1):
+    with Session(engine) as session:
+        if not session.get(User, contact_id): raise HTTPException(404, "用户不存在")
+        row = session.exec(select(Contact).where(Contact.user_id == user_id, Contact.contact_id == contact_id)).first()
+        if row is None:
+            row = Contact(user_id=user_id, contact_id=contact_id); session.add(row)
+        else: row.status = "active"
+        session.commit()
+    return {"ok": True}
+
+
+@app.get("/api/messages/thread/{contact_id}")
+async def message_thread(contact_id: int, user_id: int = 1):
+    with Session(engine) as session:
+        rows = session.exec(select(Message).where(Message.pair_key == _pair_key(user_id, contact_id)).order_by(Message.created_at)).all()
+        now = datetime.now(timezone.utc)
+        for row in rows:
+            if row.recipient_id == user_id and row.read_at is None: row.read_at = now
+        session.commit()
+        return {"messages": [{"id": row.id, "senderId": row.sender_id, "recipientId": row.recipient_id, "senderKind": row.sender_kind, "content": row.content, "createdAt": row.created_at, "readAt": row.read_at} for row in rows]}
+
+
+@app.get("/api/messages/inbox")
+async def message_inbox(user_id: int = 1):
+    with Session(engine) as session:
+        count = len(session.exec(select(Message).where(Message.recipient_id == user_id, Message.read_at == None)).all())  # noqa: E711
+    return {"unread": count}
+
+
+@app.post("/api/messages/send")
+async def send_message(payload: MessageSendRequest):
+    if payload.sender_id == payload.recipient_id: raise HTTPException(400, "不能给自己发送远程消息")
+    content = payload.content.strip()
+    if not content: raise HTTPException(422, "消息不能为空")
+    with Session(engine) as session:
+        sender, recipient = session.get(User, payload.sender_id), session.get(User, payload.recipient_id)
+        if not sender or not recipient: raise HTTPException(404, "用户不存在")
+        own_contact = session.exec(select(Contact).where(Contact.user_id == payload.sender_id, Contact.contact_id == payload.recipient_id)).first()
+        if own_contact is None or own_contact.status != "active": raise HTTPException(409, "请先将对方添加到通讯录")
+        session.add(Message(pair_key=_pair_key(payload.sender_id, payload.recipient_id), sender_id=payload.sender_id, recipient_id=payload.recipient_id, sender_kind=payload.sender_kind, content=content))
+        # A real owner's reply is the only action that clears the opposite direction.
+        if payload.sender_kind == "human":
+            reverse = session.exec(select(Contact).where(Contact.user_id == payload.recipient_id, Contact.contact_id == payload.sender_id)).first()
+            if reverse: reverse.agent_reply_streak = 0
+        presence = session.get(Presence, payload.recipient_id)
+        delivered_human = bool(presence and presence.online and presence.human_controlled)
+        session.commit()
+    if delivered_human:
+        return {"delivered": "human", "reply": None, "capped": False}
+
+    with Session(engine) as session:
+        streak = session.exec(select(Contact).where(Contact.user_id == payload.sender_id, Contact.contact_id == payload.recipient_id)).first()
+        if streak is None: raise HTTPException(409, "联系人不存在")
+        if streak.agent_reply_streak >= _reply_limit():
+            return {"delivered": "capped", "reply": None, "capped": True}
+        recipient = session.get(User, payload.recipient_id)
+        profile = {"name": recipient.name, "bio": recipient.bio, "interests": recipient.interests, "style": recipient.style}
+    try:
+        reply = await agent_runtime.chat(user_id=payload.sender_id, avatar_id=payload.recipient_id, conversation_id=f"remote:{_pair_key(payload.sender_id, payload.recipient_id)}", message=content, **profile)
+    except AgentRuntimeError as error:
+        raise HTTPException(error.status_code, detail={"code": error.code, "message": error.message, "retryable": error.retryable}) from error
+    with Session(engine) as session:
+        session.add(Message(pair_key=_pair_key(payload.sender_id, payload.recipient_id), sender_id=payload.recipient_id, recipient_id=payload.sender_id, sender_kind="agent", content=reply))
+        streak = session.exec(select(Contact).where(Contact.user_id == payload.sender_id, Contact.contact_id == payload.recipient_id)).first()
+        if streak: streak.agent_reply_streak += 1
+        session.commit()
+        current = streak.agent_reply_streak if streak else 0
+    return {"delivered": "agent", "reply": reply, "capped": False, "agentReplyStreak": current}
 
 
 async def execute_tool(
