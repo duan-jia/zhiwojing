@@ -10,13 +10,14 @@ async function startApp() {
   const contacts = setupContacts(identity.id)
   const configuredHost = import.meta.env.VITE_RPGJS_SERVER_HOST?.trim();
   const host = configuredHost || `${window.location.hostname}:8001`;
+  const token = window.localStorage.getItem('zhiwojing.auth-token') || ''
 
   try {
     await startGame(
       mergeConfig(configClient, {
         providers: [provideMmorpg({
           host,
-          query: { avatar_id: String(identity.id) },
+          query: { token, avatar_id: String(identity.id) },
         })],
       }),
     );

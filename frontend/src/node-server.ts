@@ -23,9 +23,26 @@ const server = createServer((request, response) => {
 });
 
 server.on("upgrade", (request, socket, head) => {
-  void transport.handleUpgrade(websocketServer, request, socket, head).then((handled) => {
+  void (async () => {
+    const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
+    const token = url.searchParams.get("token") || "";
+    if (process.env.AUTH_REQUIRED === "1") {
+      if (!token) return socket.destroy();
+      const apiUrl = process.env.AVATAR_API_URL || "http://127.0.0.1:8000";
+      try {
+        const verification = await fetch(`${apiUrl}/api/me`, { headers: { authorization: `Bearer ${token}` } });
+        if (!verification.ok) return socket.destroy();
+        const user = await verification.json() as { id?: number };
+        if (!Number.isInteger(user.id)) return socket.destroy();
+        url.searchParams.set("avatar_id", String(user.id));
+        request.url = `${url.pathname}${url.search}`;
+      } catch {
+        return socket.destroy();
+      }
+    }
+    const handled = await transport.handleUpgrade(websocketServer, request, socket, head);
     if (!handled) socket.destroy();
-  });
+  })();
 });
 
 server.listen(port, host, () => {

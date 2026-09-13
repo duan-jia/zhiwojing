@@ -2,12 +2,16 @@ import os
 import logging
 import sqlite3
 import re
-from datetime import datetime, timezone
+import hashlib
+import secrets
+import uuid
+from datetime import datetime, timedelta, timezone
 from ipaddress import ip_address
 from typing import Literal, Optional
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ValidationError
@@ -39,12 +43,27 @@ engine = create_engine("sqlite:///./avatar.db", connect_args={"check_same_thread
 
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    zhihu_id: str = Field(index=True, unique=True)
+    zhihu_id: Optional[str] = Field(default=None, index=True, unique=True)
+    kind: str = Field(default="zhihu", index=True)
     name: str
     bio: str = ""
     interests: str = "科技、生活、创造"
     style: str = "清晰、真诚、有条理"
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class AuthSession(SQLModel, table=True):
+    __tablename__ = "sessions"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    token_hash: str = Field(index=True, unique=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    expires_at: datetime = Field(index=True)
+    revoked_at: Optional[datetime] = Field(default=None, index=True)
+
+
+class DevLoginRequest(BaseModel):
+    user_id: int
 
 class DraftRequest(DraftInput):
     user_id: int = 1
@@ -223,6 +242,79 @@ app.add_middleware(
 )
 
 
+def _auth_required() -> bool:
+    return os.getenv("AUTH_REQUIRED", "0") == "1"
+
+
+def _auth_error(code: str = "AUTH_REQUIRED", message: str = "请提供有效的登录凭证。") -> HTTPException:
+    return HTTPException(401, detail={"code": code, "message": message, "retryable": False})
+
+
+def _token_from_request(request: Request) -> str | None:
+    authorization = request.headers.get("authorization", "")
+    scheme, _, token = authorization.partition(" ")
+    return token.strip() if scheme.lower() == "bearer" and token.strip() else None
+
+
+def _authenticated(request: Request) -> tuple[User, AuthSession] | None:
+    token = _token_from_request(request)
+    if token is None:
+        return None
+    digest = hashlib.sha256(token.encode()).hexdigest()
+    with Session(engine) as session:
+        auth_session = session.exec(select(AuthSession).where(AuthSession.token_hash == digest)).first()
+        now = datetime.now(timezone.utc)
+        expires_at = auth_session.expires_at if auth_session is not None else None
+        if expires_at is not None and expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if auth_session is None or auth_session.revoked_at is not None or expires_at <= now:
+            return None
+        user = session.get(User, auth_session.user_id)
+        if user is None:
+            return None
+        session.expunge(auth_session)
+        session.expunge(user)
+        return user, auth_session
+
+
+def _request_user_id(request: Request, legacy_user_id: int = 1) -> int:
+    user_id = getattr(request.state, "user_id", None)
+    if user_id is not None:
+        return user_id
+    if _auth_required():
+        raise _auth_error()
+    return legacy_user_id
+
+
+def _issue_token(session: Session, user_id: int) -> str:
+    token = secrets.token_urlsafe(32)
+    try:
+        days = max(1, int(os.getenv("AUTH_SESSION_DAYS", "30")))
+    except ValueError:
+        days = 30
+    session.add(AuthSession(user_id=user_id, token_hash=hashlib.sha256(token.encode()).hexdigest(), expires_at=datetime.now(timezone.utc) + timedelta(days=days)))
+    return token
+
+
+def _user_response(user: User) -> dict:
+    return {"id": user.id, "name": user.name, "kind": user.kind, "profile": {"interests": user.interests.split("、"), "style": user.style}}
+
+
+@app.middleware("http")
+async def authenticate_request(request: Request, call_next):
+    public = request.url.path == "/api/health" or request.url.path.startswith("/api/auth/")
+    if request.method == "OPTIONS" or public:
+        return await call_next(request)
+    authenticated = _authenticated(request)
+    if authenticated is not None:
+        request.state.user_id = authenticated[0].id
+        request.state.auth_session_id = authenticated[1].id
+    elif _token_from_request(request) is not None or _auth_required():
+        error = _auth_error("INVALID_TOKEN", "登录凭证无效、已过期或已注销。")
+        return JSONResponse(status_code=401, content={"detail": error.detail})
+    return await call_next(request)
+
+
 def resolve_draft_profile(user_id: int) -> DraftProfile:
     with Session(engine) as session:
         user = session.get(User, user_id)
@@ -266,6 +358,11 @@ MOCK_AVATARS = (
 def startup():
     communication_store.engine = engine
     SQLModel.metadata.create_all(engine)
+    # create_all does not add columns to databases created before authentication v1.
+    with engine.begin() as connection:
+        columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(user)")}
+        if columns and "kind" not in columns:
+            connection.exec_driver_sql("ALTER TABLE user ADD COLUMN kind VARCHAR NOT NULL DEFAULT 'zhihu'")
     with Session(engine) as session:
         existing = set(session.exec(select(User.zhihu_id)).all())
         added = False
@@ -290,8 +387,55 @@ async def health():
         "draftProvider": tool_registry.draft_provider_name,
     }
 
+
+@app.post("/api/auth/guest")
+async def auth_guest():
+    with Session(engine) as session:
+        user = User(zhihu_id=f"guest-{uuid.uuid4()}", kind="guest", name="游客")
+        session.add(user)
+        session.flush()
+        token = _issue_token(session, user.id)
+        session.commit()
+        session.refresh(user)
+        return {"token": token, "user": _user_response(user)}
+
+
+@app.post("/api/auth/dev-login")
+async def auth_dev_login(payload: DevLoginRequest):
+    if os.getenv("AUTH_DEV_MODE", "0") != "1":
+        raise HTTPException(404, detail={"code": "NOT_FOUND", "message": "接口不存在。", "retryable": False})
+    with Session(engine) as session:
+        user = session.get(User, payload.user_id)
+        if user is None:
+            raise HTTPException(404, detail={"code": "USER_NOT_FOUND", "message": "用户不存在。", "retryable": False})
+        token = _issue_token(session, user.id)
+        session.commit()
+        return {"token": token, "user": _user_response(user)}
+
+
+@app.post("/api/auth/logout")
+async def auth_logout(request: Request):
+    authenticated = _authenticated(request)
+    if authenticated is None:
+        raise _auth_error("INVALID_TOKEN", "登录凭证无效、已过期或已注销。")
+    with Session(engine) as session:
+        auth_session = session.get(AuthSession, authenticated[1].id)
+        auth_session.revoked_at = datetime.now(timezone.utc)
+        session.add(auth_session)
+        session.commit()
+    return {"ok": True}
+
+
+@app.post("/api/auth/verify")
+async def auth_verify(request: Request):
+    authenticated = _authenticated(request)
+    if authenticated is None:
+        raise _auth_error("INVALID_TOKEN", "登录凭证无效、已过期或已注销。")
+    return {"valid": True, "user": _user_response(authenticated[0])}
+
 @app.post("/api/agent/chat", response_model=AgentChatResponse)
-async def agent_chat(payload: AgentChatRequest):
+async def agent_chat(payload: AgentChatRequest, request: Request):
+    current_user_id = _request_user_id(request, payload.user_id)
     with Session(engine) as session:
         avatar = session.get(User, payload.avatar_id)
         if not avatar:
@@ -303,10 +447,10 @@ async def agent_chat(payload: AgentChatRequest):
             "style": avatar.style,
             "persona_card": persona_prompt(communication_store.get_persona(payload.avatar_id)),
         }
-    conversation_id = payload.conversation_id or f"{payload.user_id}:{payload.avatar_id}"
+    conversation_id = payload.conversation_id or f"{current_user_id}:{payload.avatar_id}"
     try:
         response = await agent_runtime.chat(
-            user_id=payload.user_id,
+            user_id=current_user_id,
             avatar_id=payload.avatar_id,
             conversation_id=conversation_id,
             message=payload.message,
@@ -329,11 +473,12 @@ async def agent_chat(payload: AgentChatRequest):
 
 
 @app.post("/api/agent/step", response_model=AgentStepResponse)
-async def agent_step(payload: AgentStepRequest):
-    card = communication_store.get_persona(payload.avatar_id) or {}
+async def agent_step(payload: AgentStepRequest, request: Request):
+    avatar_id = _request_user_id(request, payload.avatar_id)
+    card = communication_store.get_persona(avatar_id) or {}
     try:
         decision = await agent_runtime.step(
-            avatar_id=payload.avatar_id,
+            avatar_id=avatar_id,
             position=payload.position.model_dump(),
             locations=[item.model_dump() for item in payload.locations],
             nearby=[item.model_dump() for item in payload.nearby],
@@ -346,19 +491,21 @@ async def agent_step(payload: AgentStepRequest):
     return AgentStepResponse(**decision)
 
 @app.get("/api/persona")
-async def get_persona(user_id: int = 1):
+async def get_persona(request: Request, user_id: int = 1):
+    user_id = _request_user_id(request, user_id)
     persona = communication_store.get_persona(user_id)
     if persona is None:
         raise HTTPException(404, detail={"code": "PERSONA_NOT_FOUND", "message": "尚未生成人设卡。"})
     return persona
 
 @app.post("/api/memory/coldstart")
-async def memory_coldstart(payload: ColdstartRequest):
+async def memory_coldstart(payload: ColdstartRequest, request: Request):
+    user_id = _request_user_id(request, payload.user_id)
     with Session(engine) as session:
-        if not session.get(User, payload.user_id):
+        if not session.get(User, user_id):
             raise HTTPException(404, detail={"code": "USER_NOT_FOUND", "message": "用户不存在"})
     try:
-        return await run_coldstart(payload.user_id, user_zhihu_provider, communication_store)
+        return await run_coldstart(user_id, user_zhihu_provider, communication_store)
     except CapabilityError as error:
         raise HTTPException(error.status_code, detail={"code": error.code, "message": error.message, "retryable": error.retryable}) from error
     except AgentRuntimeError as error:
@@ -371,12 +518,13 @@ async def agent_init(payload: AgentInitRequest):
 
 
 @app.get("/api/me")
-async def me(user_id: int = 1):
+async def me(request: Request, user_id: int = 1):
+    user_id = _request_user_id(request, user_id)
     with Session(engine) as session:
         user = session.get(User, user_id)
         if not user:
             raise HTTPException(404, "用户不存在")
-        return {"id": user.id, "name": user.name, "profile": {"interests": user.interests.split("、"), "style": user.style}}
+        return _user_response(user)
 
 
 def _pair_key(a: int, b: int) -> str:
@@ -391,13 +539,14 @@ def _reply_limit() -> int:
 
 
 @app.post("/api/presence")
-async def update_presence(payload: PresenceRequest):
+async def update_presence(payload: PresenceRequest, request: Request):
+    user_id = _request_user_id(request, payload.user_id)
     with Session(engine) as session:
-        if not session.get(User, payload.user_id):
+        if not session.get(User, user_id):
             raise HTTPException(404, "用户不存在")
-        row = session.get(Presence, payload.user_id)
+        row = session.get(Presence, user_id)
         if row is None:
-            row = Presence(user_id=payload.user_id)
+            row = Presence(user_id=user_id)
             session.add(row)
         row.online = payload.online
         row.human_controlled = payload.human_controlled if payload.online else False
@@ -407,7 +556,8 @@ async def update_presence(payload: PresenceRequest):
 
 
 @app.get("/api/contacts")
-async def list_contacts(user_id: int = 1):
+async def list_contacts(request: Request, user_id: int = 1):
+    user_id = _request_user_id(request, user_id)
     with Session(engine) as session:
         contacts = session.exec(select(Contact).where(Contact.user_id == user_id).order_by(Contact.added_at.desc())).all()
         result = []
@@ -427,12 +577,14 @@ async def list_contacts(user_id: int = 1):
 
 
 @app.delete("/api/contacts/{contact_id}")
-async def remove_contact(contact_id: int, user_id: int = 1):
+async def remove_contact(contact_id: int, request: Request, user_id: int = 1):
+    user_id = _request_user_id(request, user_id)
     with Session(engine) as session:
-        rows = session.exec(select(Contact).where(
-            ((Contact.user_id == user_id) & (Contact.contact_id == contact_id))
-            | ((Contact.user_id == contact_id) & (Contact.contact_id == user_id))
-        )).all()
+        condition = (Contact.user_id == user_id) & (Contact.contact_id == contact_id)
+        # Preserve the pre-auth bilateral-delete contract only for legacy callers.
+        if getattr(request.state, "user_id", None) is None:
+            condition = condition | ((Contact.user_id == contact_id) & (Contact.contact_id == user_id))
+        rows = session.exec(select(Contact).where(condition)).all()
         if not rows:
             raise HTTPException(404, "联系人不存在")
         for row in rows:
@@ -442,7 +594,8 @@ async def remove_contact(contact_id: int, user_id: int = 1):
 
 
 @app.get("/api/messages/thread/{contact_id}")
-async def message_thread(contact_id: int, user_id: int = 1):
+async def message_thread(contact_id: int, request: Request, user_id: int = 1):
+    user_id = _request_user_id(request, user_id)
     with Session(engine) as session:
         rows = session.exec(select(Message).where(Message.pair_key == _pair_key(user_id, contact_id)).order_by(Message.created_at)).all()
         now = datetime.now(timezone.utc)
@@ -453,26 +606,28 @@ async def message_thread(contact_id: int, user_id: int = 1):
 
 
 @app.get("/api/messages/inbox")
-async def message_inbox(user_id: int = 1):
+async def message_inbox(request: Request, user_id: int = 1):
+    user_id = _request_user_id(request, user_id)
     with Session(engine) as session:
         count = len(session.exec(select(Message).where(Message.recipient_id == user_id, Message.read_at == None)).all())  # noqa: E711
     return {"unread": count}
 
 
 @app.post("/api/messages/send")
-async def send_message(payload: MessageSendRequest):
-    if payload.sender_id == payload.recipient_id: raise HTTPException(400, "不能给自己发送远程消息")
+async def send_message(payload: MessageSendRequest, request: Request):
+    sender_id = _request_user_id(request, payload.sender_id)
+    if sender_id == payload.recipient_id: raise HTTPException(400, "不能给自己发送远程消息")
     content = payload.content.strip()
     if not content: raise HTTPException(422, "消息不能为空")
     with Session(engine) as session:
-        sender, recipient = session.get(User, payload.sender_id), session.get(User, payload.recipient_id)
+        sender, recipient = session.get(User, sender_id), session.get(User, payload.recipient_id)
         if not sender or not recipient: raise HTTPException(404, "用户不存在")
-        own_contact = session.exec(select(Contact).where(Contact.user_id == payload.sender_id, Contact.contact_id == payload.recipient_id)).first()
+        own_contact = session.exec(select(Contact).where(Contact.user_id == sender_id, Contact.contact_id == payload.recipient_id)).first()
         if own_contact is None: raise HTTPException(409, "请先将对方添加到通讯录")
-        session.add(Message(pair_key=_pair_key(payload.sender_id, payload.recipient_id), sender_id=payload.sender_id, recipient_id=payload.recipient_id, sender_kind=payload.sender_kind, content=content))
+        session.add(Message(pair_key=_pair_key(sender_id, payload.recipient_id), sender_id=sender_id, recipient_id=payload.recipient_id, sender_kind=payload.sender_kind, content=content))
         # A real owner's reply is the only action that clears the opposite direction.
         if payload.sender_kind == "human":
-            reverse = session.exec(select(Contact).where(Contact.user_id == payload.recipient_id, Contact.contact_id == payload.sender_id)).first()
+            reverse = session.exec(select(Contact).where(Contact.user_id == payload.recipient_id, Contact.contact_id == sender_id)).first()
             if reverse: reverse.agent_reply_streak = 0
         presence = session.get(Presence, payload.recipient_id)
         delivered_human = bool(presence and presence.online and presence.human_controlled)
@@ -481,19 +636,19 @@ async def send_message(payload: MessageSendRequest):
         return {"delivered": "human", "reply": None, "capped": False}
 
     with Session(engine) as session:
-        streak = session.exec(select(Contact).where(Contact.user_id == payload.sender_id, Contact.contact_id == payload.recipient_id)).first()
+        streak = session.exec(select(Contact).where(Contact.user_id == sender_id, Contact.contact_id == payload.recipient_id)).first()
         if streak is None: raise HTTPException(409, "联系人不存在")
         if streak.agent_reply_streak >= _reply_limit():
             return {"delivered": "capped", "reply": None, "capped": True}
         recipient = session.get(User, payload.recipient_id)
         profile = {"name": recipient.name, "bio": recipient.bio, "interests": recipient.interests, "style": recipient.style}
     try:
-        reply = await agent_runtime.chat(user_id=payload.sender_id, avatar_id=payload.recipient_id, conversation_id=f"remote:{_pair_key(payload.sender_id, payload.recipient_id)}", message=content, **profile)
+        reply = await agent_runtime.chat(user_id=sender_id, avatar_id=payload.recipient_id, conversation_id=f"remote:{_pair_key(sender_id, payload.recipient_id)}", message=content, **profile)
     except AgentRuntimeError as error:
         raise HTTPException(error.status_code, detail={"code": error.code, "message": error.message, "retryable": error.retryable}) from error
     with Session(engine) as session:
-        session.add(Message(pair_key=_pair_key(payload.sender_id, payload.recipient_id), sender_id=payload.recipient_id, recipient_id=payload.sender_id, sender_kind="agent", content=reply))
-        streak = session.exec(select(Contact).where(Contact.user_id == payload.sender_id, Contact.contact_id == payload.recipient_id)).first()
+        session.add(Message(pair_key=_pair_key(sender_id, payload.recipient_id), sender_id=payload.recipient_id, recipient_id=sender_id, sender_kind="agent", content=reply))
+        streak = session.exec(select(Contact).where(Contact.user_id == sender_id, Contact.contact_id == payload.recipient_id)).first()
         if streak: streak.agent_reply_streak += 1
         session.commit()
         current = streak.agent_reply_streak if streak else 0
@@ -635,9 +790,10 @@ async def oauth_logout():
     return {"ok": True}
 
 @app.post("/api/avatar/draft", response_model=DraftResult)
-async def create_draft(payload: DraftRequest):
+async def create_draft(payload: DraftRequest, request: Request):
+    user_id = _request_user_id(request, payload.user_id)
     return await execute_tool(
         "generate_draft",
         payload.model_dump(exclude={"user_id"}),
-        ToolContext(user_id=payload.user_id),
+        ToolContext(user_id=user_id),
     )

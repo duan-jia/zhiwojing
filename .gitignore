@@ -8,3 +8,7 @@ __pycache__/
 *.pyc
 *.db
 .env
+
+# Runtime memory and vector databases
+backend/memory_data/
+backend/avatar.db

@@ -32,6 +32,7 @@ type AgentAction =
 type AgentState = 'human' | 'agent' | 'degraded'
 type Signal<T> = (() => T) & { set(value: T): void }
 type AgentPlayer = RpgPlayer & {
+  authToken?: string
   avatarId: Signal<number>
   agentMode: Signal<boolean>
   agentSpeech: Signal<string>
@@ -72,7 +73,7 @@ function defeated(player: AgentPlayer) {
 
 function reportPresence(player: AgentPlayer, humanControlled: boolean) {
   const controller = new AbortController()
-  void post('/api/presence', {
+  void post(player, '/api/presence', {
     user_id: value(player.avatarId), online: true, human_controlled: humanControlled,
   }, controller.signal).catch(error => console.warn('presence update failed', error))
 }
@@ -122,9 +123,9 @@ function acquireModelSlot(signal: AbortSignal): Promise<() => void> {
   })
 }
 
-async function post<T>(path: string, body: object, signal: AbortSignal): Promise<T> {
+async function post<T>(player: AgentPlayer, path: string, body: object, signal: AbortSignal): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal,
+    method: 'POST', headers: { 'content-type': 'application/json', ...(player.authToken ? { authorization: `Bearer ${player.authToken}` } : {}) }, body: JSON.stringify(body), signal,
   })
   if (!response.ok) throw new Error(`avatar API ${response.status}`)
   return response.json() as Promise<T>
@@ -243,7 +244,7 @@ async function refreshIntent(player: AgentPlayer, generation: number) {
   let release: (() => void) | undefined
   try {
     release = await acquireModelSlot(controller.signal)
-    const action = await post<AgentAction>('/api/agent/step', {
+    const action = await post<AgentAction>(player, '/api/agent/step', {
       avatar_id: value(player.avatarId), position: position(player), locations: AGENT_LOCATIONS,
       nearby: nearby(player).map(({ other, distance }) => ({ avatar_id: value(other.avatarId), name: other.name, distance })),
       persona: player.name, last_action: state.previousTargetId,
@@ -282,7 +283,7 @@ async function startMeeting(player: AgentPlayer, other: AgentPlayer, generation:
   showBubble(player, `你好，${other.name}！`)
   try {
     release = await acquireModelSlot(controller.signal)
-    const response = await post<{ response: string }>('/api/agent/chat', {
+    const response = await post<{ response: string }>(player, '/api/agent/chat', {
       user_id: value(player.avatarId), avatar_id: value(other.avatarId),
       conversation_id: `meeting:${pair}`, message: `你好，${other.name}！`,
     }, controller.signal)
