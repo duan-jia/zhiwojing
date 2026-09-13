@@ -13,6 +13,14 @@ let failSteps = false
 let stepDelayMs = 0
 let activeSteps = 0
 let maxActiveSteps = 0
+const TEST_BUILDINGS = [
+  ['hot', '知乎热榜', '榜', 'landmark-hot-square', 'hot-square', 928, 608],
+  ['home', '知我居', '居', 'landmark-user-home', 'user-home', 448, 544],
+  ['book', '藏书阁', '书', 'landmark-book', 'book', 1504, 576],
+  ['wendao', '问道馆', '问', 'landmark-wendao', 'wendao', 448, 1152],
+  ['write', '创作坊', '创', 'landmark-write', 'write', 1472, 1152],
+  ['tiangong', '天工坊', '工', 'landmark-tiangong', 'tiangong', 992, 1280],
+]
 
 function json(response, status, body) {
   response.writeHead(status, {
@@ -75,6 +83,11 @@ test.beforeAll(async () => {
     if (request.method === 'OPTIONS') return json(response, 200, {})
     if (request.url === '/api/health') return json(response, 200, { status: 'ok' })
     if (request.url === '/api/oauth/status') return json(response, 200, { configured: false, integrationReady: false })
+    if (request.url === '/api/world/buildings') return json(response, 200, { revision: 'test', buildings: TEST_BUILDINGS.map(([id, name, icon]) => ({
+      id, name, icon, description: `${name}功能`, capabilities: [
+        { id: `test_${id}`, label: id === 'hot' ? '浏览热榜' : `${name}功能`, description: '浏览器交互验证。', status: 'ready', authScope: 'app', ui: 'hot-list' },
+      ],
+    })) })
     if (request.url === '/api/zhihu/hot') return json(response, 200, { items: [{
       title: '全景热榜交互验证',
       url: 'https://www.zhihu.com/question/1',
@@ -146,26 +159,32 @@ test('six buildings load without legacy markers and hot-list interaction works',
       return Object.entries(s.events).filter(([id, event]) => id.startsWith('town-building-') && event.graphicBounds?.width > 100).length
     }, {timeout:30000}).toBe(6)
     await page.waitForTimeout(500)
-    await page.screenshot({path: '../docs/town-installed-desktop.png'})
     const s = await snapshot(page)
     for (const id of ['home','hot','book','wendao','write','tiangong']) expect(s.events['town-building-' + id]).toBeTruthy()
-    for (const id of ['landmark-hot-square','landmark-user-home']) {
+    for (const id of ['landmark-hot-square','landmark-user-home','landmark-book','landmark-wendao','landmark-write','landmark-tiangong']) {
       expect(s.events[id]).toBeTruthy()
       expect(s.events[id].graphicBounds?.width).toBe(1)
       expect(s.events[id].graphicBounds?.height).toBe(1)
     }
-    await page.evaluate(async () => {
+    for (const [buildingId, name, icon, id, kind, x, y] of TEST_BUILDINGS) {
+      await page.evaluate(async landmark => {
+        const { openLandmarkPanel } = await import('/src/landmark-panel.ts')
+        openLandmarkPanel(landmark)
+      }, { id, name, x, y, kind, buildingId, icon })
+      await expect(page.getByRole('button', { name: new RegExp(buildingId === 'hot' ? '浏览热榜' : `${name}功能`) })).toBeVisible()
+    }
+    await page.evaluate(async landmark => {
       const { openLandmarkPanel } = await import('/src/landmark-panel.ts')
-      openLandmarkPanel({
-        id: 'landmark-hot-square', name: '热榜广场', x: 928, y: 608, kind: 'hot-square',
-      })
-    })
+      openLandmarkPanel(landmark)
+    }, { id: 'landmark-hot-square', name: '知乎热榜', x: 928, y: 608, kind: 'hot-square', buildingId: 'hot', icon: '榜' })
     await expect(page.locator('#landmark-root')).toBeVisible()
-    await expect(page.locator('#landmark-title')).toHaveText('热榜广场')
+    await expect(page.locator('#landmark-title')).toHaveText('知乎热榜')
+    await expect(page.getByRole('button', { name: /浏览热榜/ })).toBeVisible()
+    await page.screenshot({path: '../docs/town-installed-desktop.png'})
+    await page.setViewportSize({width:390,height:844})
+    await page.screenshot({path: '../docs/town-installed-mobile.png'})
+    await page.getByRole('button', { name: /浏览热榜/ }).click()
     await expect(page.locator('.hot-item strong')).toHaveText('全景热榜交互验证')
     await page.keyboard.press('Escape')
-    await page.setViewportSize({width:390,height:844})
-    await page.waitForTimeout(500)
-    await page.screenshot({path: '../docs/town-installed-mobile.png'})
   } finally { await context.close(); await browser.close() }
 })

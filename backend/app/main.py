@@ -22,6 +22,7 @@ from .memory import MemoryConfig, MemoryService, StructuredStore, build_mem0
 from .memory.store import Contact, Message, Presence
 from .memory.coldstart import persona_prompt, run_coldstart
 from .zhihu import CapabilityError, ToolContext, build_tool_registry
+from .zhihu.catalog import BuildingCatalog, build_building_catalog
 from .zhihu.http_provider import HttpZhihuProvider
 from .zhihu.models import (
     DraftInput,
@@ -386,6 +387,11 @@ async def health():
         "zhihuProvider": tool_registry.provider_name,
         "draftProvider": tool_registry.draft_provider_name,
     }
+
+
+@app.get("/api/world/buildings", response_model=BuildingCatalog)
+async def world_buildings():
+    return build_building_catalog()
 
 
 @app.post("/api/auth/guest")

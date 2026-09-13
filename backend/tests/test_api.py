@@ -48,6 +48,41 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(health.json()["status"], "ok")
         self.assertEqual(profile.json()["name"], "体验用户")
 
+    async def test_building_catalog_assigns_every_capability(self):
+        with patch.dict(os.environ, {"ZHIHU_ACCESS_SECRET": ""}):
+            response = await self.client.get("/api/world/buildings")
+
+        self.assertEqual(response.status_code, 200)
+        catalog = response.json()
+        self.assertEqual([item["id"] for item in catalog["buildings"]], [
+            "hot", "home", "book", "wendao", "write", "tiangong",
+        ])
+        capabilities = [
+            capability
+            for building in catalog["buildings"]
+            for capability in building["capabilities"]
+        ]
+        ids = [capability["id"] for capability in capabilities]
+        self.assertEqual(len(ids), len(set(ids)))
+        # 22 user-facing Zhihu APIs (quota is operational) plus persona and draft.
+        self.assertEqual(len(ids), 24)
+        self.assertEqual(
+            next(item for item in capabilities if item["id"] == "hot_list")["status"],
+            "unconfigured",
+        )
+        self.assertEqual(
+            next(item for item in capabilities if item["id"] == "generate_draft")["status"],
+            "ready",
+        )
+        self.assertEqual(
+            next(item for item in capabilities if item["id"] == "user_contents")["status"],
+            "auth_required",
+        )
+        self.assertEqual(
+            next(item for item in capabilities if item["id"] == "pdf_parse")["status"],
+            "coming_soon",
+        )
+
     async def test_invalid_inputs(self):
         for idea in ["", "  ", "学习", " 学习 "]:
             with self.subTest(idea=idea):

@@ -20,6 +20,7 @@ FastAPI 不再持有地图、房间、角色位置或 WebSocket 移动状态；`
 ## 当前能力
 
 - 64×48 连续 Tiled 小镇地图，已接入知乎热榜、知我居、问道馆、藏书阁、创作坊、天工坊六栋 PNG 建筑，以及南侧环路、独立底座碰撞和完整 2×2 树木；旧四分区地图保留为素材。布局和截图见 [TOWN_LAYOUT.md](./TOWN_LAYOUT.md)。
+- 六栋建筑均已在门口注册可交互地标。`GET /api/world/buildings` 下发 24 项面向用户的能力目录及 `ready`、`unconfigured`、`auth_required`、`coming_soon` 状态；前端先展示建筑功能列表，再进入已接通的热榜、搜索、直答、选题、草稿、人设或创作数据页面。知乎 OAuth 未完成前，个人知乎数据入口保持“需授权”，不把服务端 Access Secret 所属账号误称为当前游戏用户。
 - RPGJS 服务端权威 MMORPG 多人同步。
 - 知乎公共内容、草稿、OAuth 预留 REST 能力保持不变。
 - `POST /api/agent/chat` 已实现整段响应的 Agent Loop：自己的分身可用 11 个工具（4 个只读工具、`generate_draft`/`zhida`，以及 `user_contents`、`user_followees`、`user_collections`、`user_favlists`、`creator_account_stats` 5 个个人数据工具），访问别人的分身只可用 4 个只读工具。

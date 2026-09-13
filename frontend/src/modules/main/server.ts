@@ -28,32 +28,19 @@ export default defineModule<RpgServer>({
           },
         },
       })),
-      {
-        id: 'landmark-hot-square',
-        x: 928,
-        y: 608,
+      ...TOWN_BUILDINGS.map(building => ({
+        id: building.landmarkId,
+        x: building.doorX * 32,
+        y: building.doorY * 32,
         event: {
           onInit() {
-            this.name = '◆ 热榜广场'
-            // Keep an invisible interaction anchor at the new building door.
+            this.name = `${building.icon} ${building.name}`
+            // Invisible interaction anchor at the building door.
             this.setHitbox(1, 1)
             this.through = true
           },
         },
-      },
-      {
-        id: 'landmark-user-home',
-        x: 448,
-        y: 544,
-        event: {
-          onInit() {
-            this.name = '⌂ 知我居'
-            // Keep an invisible interaction anchor at the new building door.
-            this.setHitbox(1, 1)
-            this.through = true
-          },
-        },
-      },
+      })),
       {
         id: 'avatar-su-wan',
         x: 864,
