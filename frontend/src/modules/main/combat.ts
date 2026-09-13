@@ -2,6 +2,7 @@ import type { RpgPlayer } from '@rpgjs/server'
 import { setActionBattleInvincibility } from '@rpgjs/action-battle/server'
 import { AUTONOMOUS_RESPAWN_MS, PLAYER_ATTACK_DAMAGE, PLAYER_MAX_HP, RESPAWN_INVINCIBILITY_MS, applyFixedDamage, canTargetCombatPlayer, isDefeated, restoreCombatPlayer, shouldAutoRespawn } from '../../combat-state'
 import { pauseAgent, resumeAgent } from './autonomy'
+import { combatAnimations } from '../../combat-animation-logic'
 
 const respawnTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
@@ -52,6 +53,7 @@ export function clearRespawnTimer(player: RpgPlayer) {
 
 export const actionBattleOptions = {
   preset: 'classic' as const,
+  animations: combatAnimations,
   combat: {
     player: { combo: false, chargedAttack: false, dodge: false, guard: false, softTargeting: false },
     targets: {
