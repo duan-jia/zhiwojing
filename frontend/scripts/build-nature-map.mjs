@@ -44,26 +44,20 @@ for (const [x1, y1, x2, y2] of [[14,15,15,23],[26,13,27,19],[38,15,39,23],[12,25
 // matrix has two roof rows, walls and a two-tile-high door. This prevents visual
 // components from changing collision while keeping the entire roof footprint
 // blocked (including entry from the north).
-const styleA = width => [
-  Array.from({ length: width }, (_, i) => i === 0 ? 352 : i === width - 1 ? 354 : 353),
-  Array.from({ length: width }, () => 360),
-  Array.from({ length: width }, (_, i) => [371, 372, 373, 374, 375, 371][i]),
-  Array.from({ length: width }, (_, i) => i === Math.floor(width / 2) ? 383 : [371, 372, 373, 374, 375, 371][i]),
-  Array.from({ length: width }, (_, i) => i === Math.floor(width / 2) ? 383 : [371, 372, 373, 374, 375, 371][i]),
+const styleA = width => width === 6 ? [
+  [336,337,337,337,337,338], [344,345,345,345,345,346], [352,353,353,353,353,354],
+  [352,353,353,375,353,354], [352,353,353,383,353,354],
+] : [
+  [336,337,337,337,338], [344,345,345,345,346], [352,353,353,353,354],
+  [352,353,375,353,354], [352,353,383,353,354],
 ]
-const styleB = width => [
-  Array.from({ length: width }, (_, i) => i === 0 ? 352 : i === width - 1 ? 354 : 353),
-  Array.from({ length: width }, () => 370),
-  Array.from({ length: width }, (_, i) => [377, 378, 378, 378, 379, 377][i]),
-  Array.from({ length: width }, (_, i) => i === Math.floor(width / 2) ? 383 : [377, 378, 378, 378, 379, 377][i]),
-  Array.from({ length: width }, (_, i) => i === Math.floor(width / 2) ? 383 : [377, 378, 378, 378, 379, 377][i]),
+const styleB = () => [
+  [339,340,340,340,341], [347,348,348,348,349], [416,417,417,417,418],
+  [416,417,391,417,418], [416,417,399,417,418],
 ]
-const styleC = width => [
-  Array.from({ length: width }, (_, i) => i === 0 ? 352 : i === width - 1 ? 354 : 353),
-  Array.from({ length: width }, () => 360),
-  Array.from({ length: width }, (_, i) => i === 1 ? 337 : i === width - 2 ? 338 : [371, 372, 373, 374, 375][i]),
-  Array.from({ length: width }, (_, i) => i === Math.floor(width / 2) ? 383 : [371, 372, 373, 374, 375][i]),
-  Array.from({ length: width }, (_, i) => i === Math.floor(width / 2) ? 383 : [371, 372, 373, 374, 375][i]),
+const styleC = () => [
+  [336,337,337,337,338], [344,345,345,345,346], [352,353,353,353,354],
+  [352,368,369,370,354], [352,376,377,378,354],
 ]
 const houses = [
   { x1: 12, y1: 10, x2: 16, y2: 14, matrix: styleA(5) },
@@ -109,7 +103,7 @@ ${tileLayer(3, 'Buildings', buildings, ' visible="0"')}
 ${tileLayer(4, 'Facade', facade)}
 ${tileLayer(5, 'Nature', nature)}
  <objectgroup id="6" name="Objects">
-  <object id="1" name="start" class="start" x="832" y="448"><point/></object>
+  <object id="1" name="start" class="start" x="928" y="832"><point/></object>
 ${signs}
  </objectgroup>
 </map>

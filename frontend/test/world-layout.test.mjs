@@ -22,7 +22,7 @@ test('town map has the compact 64x48 layered Tiled layout', async () => {
   for (const name of ['Ground','Terrain','Buildings','Facade','Nature']) decode(xml,name)
   assert.match(xml, /<layer[^>]*name="Buildings"[^>]*visible="0"/)
   assert.match(xml, /<objectgroup[^>]*name="Objects"/)
-  assert.match(xml, /name="start"[^>]*x="832" y="448"/)
+  assert.match(xml, /name="start"[^>]*x="928" y="832"/)
 })
 
 test('five facades have approved footprints, signs, collision, and clear approaches', async () => {
@@ -40,10 +40,11 @@ test('five facades have approved footprints, signs, collision, and clear approac
     assert.equal(cell(buildings,dx,dy),0,`${name} approach`)
     assert.equal(cell(terrain,dx,dy),4279,`${name} approach path`)
   }
-  assert.deepEqual([cell(facade,12,10),cell(facade,12,11)],[352,360])
-  assert.deepEqual([cell(facade,24,8),cell(facade,24,9)],[352,370])
-  assert.deepEqual([cell(facade,37,12),cell(facade,39,12)],[337,338])
-  assert.equal(cell(facade,14,13),383); assert.equal(cell(facade,14,14),383)
+  assert.deepEqual([cell(facade,12,10),cell(facade,12,11)],[336,344])
+  assert.deepEqual([cell(facade,24,8),cell(facade,24,9)],[339,347])
+  assert.deepEqual([cell(facade,37,13),cell(facade,39,14)],[368,378])
+  assert.equal(cell(facade,14,13),375); assert.equal(cell(facade,14,14),383)
+  for (let y=10;y<=14;y++) for (let x=17;x<=20;x++) assert.equal(cell(facade,x,y),0,`知我居 footprint overflow ${x},${y}`)
 })
 
 test('water boundary collides visually and roads, spawn, landmarks remain aligned', async () => {
