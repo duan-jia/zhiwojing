@@ -48,3 +48,16 @@ npm run test:production
 # CSS reset and text colors
 
 `index.html` imports `@rpgjs/ui-css/reset.css`, whose global `body` rule uses white text. Do not rely on inherited text color for application UI: every light-background panel or control in `login.css` must set an explicit dark `color`. Dark game HUDs, status overlays, prompts, and blue message bubbles should continue to set white text explicitly.
+
+## 小镇地图与镜头
+
+`src/tiled/nature-open-world.tmx` 是 64×48、每格 32×32 px 的 Tiled 地图。图层按
+`Ground`（草地底色）、`Terrain`（道路/水）、`Buildings`（五栋建筑外观）、
+`Nature`（树木/石块）排列，`Objects` 保存出生点与文字招牌坐标。坐标均以地图左上角
+为原点；代码中的像素坐标等于格坐标乘 32。中央广场为 x=23..34、y=19..28；出生点
+为 (29,26)。建筑仅作外观，门前道路可通行；水、树和建筑瓦片带碰撞。
+
+镜头默认缩放为 **2×**，可在构建/启动前通过 `VITE_CAMERA_ZOOM` 调整，例如
+`VITE_CAMERA_ZOOM=1.5 npm run dev`。此项只改变镜头，不改变 32×32 角色或地图坐标。
+地图源需要调整时运行 `npm run build:map`，并同步修改 `landmarks.ts`、服务端事件和
+`modules/main/autonomy.ts` 中的地点。

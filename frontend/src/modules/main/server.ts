@@ -15,8 +15,8 @@ export default defineModule<RpgServer>({
     events: [
       {
         id: 'landmark-hot-square',
-        x: 800,
-        y: 736,
+        x: 928,
+        y: 704,
         event: {
           onInit() {
             this.name = '◆ 热榜广场'
@@ -26,8 +26,8 @@ export default defineModule<RpgServer>({
       },
       {
         id: 'landmark-user-home',
-        x: 672,
-        y: 736,
+        x: 448,
+        y: 480,
         event: {
           onInit() {
             this.name = '⌂ 知我居'
@@ -37,8 +37,8 @@ export default defineModule<RpgServer>({
       },
       {
         id: 'avatar-su-wan',
-        x: 736,
-        y: 800,
+        x: 864,
+        y: 768,
         event: {
           onInit() {
             this.name = '苏晚'
@@ -49,8 +49,8 @@ export default defineModule<RpgServer>({
       },
       {
         id: 'avatar-zhou-bo',
-        x: 864,
-        y: 800,
+        x: 992,
+        y: 768,
         event: {
           onInit() {
             this.name = '周博'

@@ -18,12 +18,12 @@ async function loadTypeScriptModule(relativePath) {
 test('landmark registry exposes hot square close to the spawn', async () => {
   const { LANDMARKS, landmarkForId } = await loadTypeScriptModule('src/landmarks.ts')
   assert.deepEqual(LANDMARKS[0], {
-    id: 'landmark-hot-square', name: '热榜广场', x: 800, y: 736, kind: 'hot-square'
+    id: 'landmark-hot-square', name: '热榜广场', x: 928, y: 704, kind: 'hot-square'
   })
   assert.equal(landmarkForId('landmark-hot-square').kind, 'hot-square')
   assert.equal(landmarkForId('missing'), null)
   assert.deepEqual(LANDMARKS[1], {
-    id: 'landmark-user-home', name: '知我居', x: 672, y: 736, kind: 'user-home'
+    id: 'landmark-user-home', name: '知我居', x: 448, y: 480, kind: 'user-home'
   })
 })
 
