@@ -50,7 +50,16 @@ fi
 # @rpgjs/client is tracked as a Git submodule. A plain clone leaves it empty.
 if [[ -f "${repo_dir}/.gitmodules" ]] && command -v git >/dev/null; then
   echo "初始化 RPGJS 客户端子模块……"
-  git -C "${repo_dir}" submodule update --init --recursive
+  if ! git -C "${repo_dir}" submodule update --init --recursive; then
+    submodule_dir="${frontend_dir}/vendor/@rpgjs/client"
+    module_cache="${repo_dir}/.git/modules/frontend/vendor/@rpgjs/client"
+    backup_dir="/tmp/rpgjs-client-backup-$(date +%Y%m%d%H%M%S)"
+    echo "清理不完整的 RPGJS 子模块状态并重试（旧目录将备份到 ${backup_dir}）……"
+    if [[ -d "${submodule_dir}" ]]; then mv "${submodule_dir}" "${backup_dir}"; fi
+    rm -rf "${module_cache}"
+    git -C "${repo_dir}" submodule deinit -f -- frontend/vendor/@rpgjs/client >/dev/null 2>&1 || true
+    git -C "${repo_dir}" submodule update --init --recursive
+  fi
 fi
 [[ -f "${frontend_dir}/vendor/@rpgjs/client/package.json" ]] || {
   echo "缺少 frontend/vendor/@rpgjs/client；请确认 Git 子模块已初始化。" >&2
