@@ -14,6 +14,16 @@
 
 它会构建前端并启动 FastAPI 8000、RPGJS world 8001 和 Vite 5173；任一服务退出时会停止其余进程。没有模型密钥时仍可进入世界，托管角色会显示“本地巡游中”并使用确定性地标巡游。
 
+## 腾讯云一键部署
+
+在 Ubuntu 腾讯云轻量服务器上，从仓库根目录运行：
+
+```bash
+sudo bash scripts/deploy-tencent.sh
+```
+
+脚本会构建前端、创建 FastAPI/RPGJS 的 systemd 服务、生成 Nginx 配置并尝试申请 HTTPS。它默认使用 `duanzhiwojing.site` 与 `game.duanzhiwojing.site`，也会交互询问域名和 OAuth 凭证。OAuth 凭证只写入服务器 `/etc/zhihu.env`（权限 600），不会写入仓库；运行前请先将两个域名的 DNS A 记录指向服务器公网 IP。当前版本的 OAuth 路由仍是安全占位接口，真实授权流程需在后续版本启用。
+
 也可以分别启动。先启动 FastAPI「大脑」服务（Python 3.11+）：
 
 ```bash
