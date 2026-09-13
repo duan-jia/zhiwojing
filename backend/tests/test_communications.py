@@ -22,16 +22,20 @@ class CommunicationTests(unittest.IsolatedAsyncioTestCase):
     async def send(self, sender=1, recipient=2, content="你好"):
         return await self.client.post('/api/messages/send', json={"sender_id": sender, "recipient_id": recipient, "content": content})
 
-    async def test_contacts_idempotent_and_removed_is_respected(self):
+    async def test_contacts_delete_both_directions_and_meeting_restores(self):
         main.communication_store.ensure_contacts(1, 2)
         with Session(main.engine) as session:
             self.assertEqual(len(session.exec(select(Contact)).all()), 2)
         await self.client.delete('/api/contacts/2?user_id=1')
+        self.assertEqual((await self.client.get('/api/contacts?user_id=1')).json()['contacts'], [])
+        self.assertEqual((await self.client.get('/api/contacts?user_id=2')).json()['contacts'], [])
+        self.assertEqual((await self.send()).status_code, 409)
         main.communication_store.ensure_contacts(1, 2)
-        contacts = (await self.client.get('/api/contacts?user_id=1')).json()['contacts']
-        self.assertEqual(contacts[0]['status'], 'removed')
-        await self.client.post('/api/contacts/2/restore?user_id=1')
-        self.assertEqual((await self.client.get('/api/contacts?user_id=1')).json()['contacts'][0]['status'], 'active')
+        runtime = AsyncMock(); runtime.chat.return_value = '重新联系上了'
+        with patch.object(main, 'agent_runtime', runtime):
+            self.assertEqual((await self.send()).status_code, 200)
+        self.assertEqual(len((await self.client.get('/api/contacts?user_id=1')).json()['contacts']), 1)
+        self.assertEqual(len((await self.client.get('/api/contacts?user_id=2')).json()['contacts']), 1)
 
     async def test_online_human_does_not_auto_reply(self):
         await self.client.post('/api/presence', json={"user_id": 2, "online": True, "human_controlled": True})

@@ -41,7 +41,6 @@ class Contact(SQLModel, table=True):
     user_id: int = Field(index=True)
     contact_id: int = Field(index=True)
     added_at: datetime = Field(default_factory=utcnow)
-    status: str = Field(default="active", index=True)
     agent_reply_streak: int = 0
 
 class Message(SQLModel, table=True):
@@ -85,7 +84,7 @@ class StructuredStore:
             if row is None: row=AvatarProfile(avatar_id=avatar_id); s.add(row)
             old=json.loads(row.owner_facts_json or "{}"); old.update(data); row.owner_facts_json=json.dumps(old,ensure_ascii=False); row.updated_at=utcnow(); s.commit()
     def ensure_contacts(self, a: int, b: int) -> None:
-        """Add both directions once; a deliberate removal is never overwritten."""
+        """Add both directions once after a pair completes a conversation."""
         if a == b: return
         with Session(self.engine) as s:
             for owner, partner in ((a, b), (b, a)):

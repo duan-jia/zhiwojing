@@ -392,7 +392,7 @@ async def list_contacts(user_id: int = 1):
             unread = len(session.exec(select(Message).where(Message.recipient_id == user_id, Message.sender_id == contact.contact_id, Message.read_at == None)).all())  # noqa: E711
             result.append({
                 "id": contact.contact_id, "name": user.name if user else f"用户 {contact.contact_id}",
-                "status": contact.status, "online": bool(presence and presence.online),
+                "online": bool(presence and presence.online),
                 "humanControlled": bool(presence and presence.online and presence.human_controlled),
                 "lastMessage": messages[0].content if messages else None, "unread": unread,
                 "agentReplyStreak": contact.agent_reply_streak,
@@ -403,20 +403,14 @@ async def list_contacts(user_id: int = 1):
 @app.delete("/api/contacts/{contact_id}")
 async def remove_contact(contact_id: int, user_id: int = 1):
     with Session(engine) as session:
-        row = session.exec(select(Contact).where(Contact.user_id == user_id, Contact.contact_id == contact_id)).first()
-        if row is None: raise HTTPException(404, "联系人不存在")
-        row.status = "removed"; session.add(row); session.commit()
-    return {"ok": True}
-
-
-@app.post("/api/contacts/{contact_id}/restore")
-async def restore_contact(contact_id: int, user_id: int = 1):
-    with Session(engine) as session:
-        if not session.get(User, contact_id): raise HTTPException(404, "用户不存在")
-        row = session.exec(select(Contact).where(Contact.user_id == user_id, Contact.contact_id == contact_id)).first()
-        if row is None:
-            row = Contact(user_id=user_id, contact_id=contact_id); session.add(row)
-        else: row.status = "active"
+        rows = session.exec(select(Contact).where(
+            ((Contact.user_id == user_id) & (Contact.contact_id == contact_id))
+            | ((Contact.user_id == contact_id) & (Contact.contact_id == user_id))
+        )).all()
+        if not rows:
+            raise HTTPException(404, "联系人不存在")
+        for row in rows:
+            session.delete(row)
         session.commit()
     return {"ok": True}
 
@@ -448,7 +442,7 @@ async def send_message(payload: MessageSendRequest):
         sender, recipient = session.get(User, payload.sender_id), session.get(User, payload.recipient_id)
         if not sender or not recipient: raise HTTPException(404, "用户不存在")
         own_contact = session.exec(select(Contact).where(Contact.user_id == payload.sender_id, Contact.contact_id == payload.recipient_id)).first()
-        if own_contact is None or own_contact.status != "active": raise HTTPException(409, "请先将对方添加到通讯录")
+        if own_contact is None: raise HTTPException(409, "请先将对方添加到通讯录")
         session.add(Message(pair_key=_pair_key(payload.sender_id, payload.recipient_id), sender_id=payload.sender_id, recipient_id=payload.recipient_id, sender_kind=payload.sender_kind, content=content))
         # A real owner's reply is the only action that clears the opposite direction.
         if payload.sender_kind == "human":
