@@ -45,3 +45,6 @@ npm run test:production
 ### Graphics
 
 [Pipoya](https://pipoya.itch.io)
+# CSS reset and text colors
+
+`index.html` imports `@rpgjs/ui-css/reset.css`, whose global `body` rule uses white text. Do not rely on inherited text color for application UI: every light-background panel or control in `login.css` must set an explicit dark `color`. Dark game HUDs, status overlays, prompts, and blue message bubbles should continue to set white text explicitly.
