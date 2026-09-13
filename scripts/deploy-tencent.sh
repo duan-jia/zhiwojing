@@ -17,8 +17,11 @@ read -r -p "主域名 [duanzhiwojing.site]: " domain
 domain="${domain:-duanzhiwojing.site}"
 read -r -p "游戏子域名 [game.${domain}]: " game_domain
 game_domain="${game_domain:-game.${domain}}"
+read -r -p "服务器公网 IPv4 [116.30.139.215]: " server_ip
+server_ip="${server_ip:-116.30.139.215}"
 
 echo "将部署 ${domain}（前端/API）和 ${game_domain}（RPGJS/WebSocket）。"
+echo "请确认 DNS 已将 ${domain} 和 ${game_domain} 的 A 记录指向 ${server_ip}。"
 read -r -p "继续？[y/N] " confirm
 [[ "${confirm}" =~ ^[Yy]$ ]] || { echo "已取消。"; exit 0; }
 
