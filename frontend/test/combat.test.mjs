@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { applyFixedDamage, canTargetCombatPlayer, isDefeated, restoreCombatPlayer, shouldAutoRespawn } from '../src/combat-state.ts'
+import { applyCombatDamage, applyFixedDamage, canTargetCombatPlayer, isDefeated, restoreCombatPlayer, shouldAutoRespawn } from '../src/combat-state.ts'
 import { isAttackKey, processCombatKey } from '../src/combat-input-logic.ts'
 import { normalizeHp } from '../src/combat-hud-logic.ts'
 import { COMBAT_ANIMATION_KEYS, combatAnimations, resolveCombatAnimation, withCombatAnimationAliases } from '../src/combat-animation-logic.ts'
@@ -15,6 +15,19 @@ test('fixed damage clamps hp and reports defeat', () => {
   assert.equal(isDefeated(target), true)
 })
 
+test('combat NPCs can be hit but never become defeated', () => {
+  const npc = { hp: 10, combatNpc: true }
+  assert.deepEqual(applyCombatDamage(npc, 25), { damage: 10, defeated: false })
+  assert.equal(npc.hp, 1)
+  assert.equal(isDefeated(npc), false)
+})
+
+test('combat damage supports weapon multipliers', () => {
+  const target = { hp: 100 }
+  assert.deepEqual(applyCombatDamage(target, 25 * 1.25), { damage: 31, defeated: false })
+  assert.equal(target.hp, 69)
+})
+
 test('autonomous players are eligible for timed respawn', () => {
   assert.equal(shouldAutoRespawn({ agentMode: () => true }), true)
   assert.equal(shouldAutoRespawn({ agentMode: () => false }), false)
@@ -26,6 +39,7 @@ test('target selection excludes self and defeated players but allows another liv
   assert.equal(canTargetCombatPlayer(attacker, attacker), false)
   assert.equal(canTargetCombatPlayer(attacker, target), true)
   assert.equal(canTargetCombatPlayer(attacker, { hp: 100, isEvent: () => true }), false)
+  assert.equal(canTargetCombatPlayer(attacker, { hp: 100, combatNpc: true, isEvent: () => true }), true)
   target.defeated = true
   assert.equal(canTargetCombatPlayer(attacker, target), false)
   attacker.hp = 0

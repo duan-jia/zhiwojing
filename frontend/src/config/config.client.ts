@@ -100,7 +100,19 @@ export default {
           },
           {
             id: 'liukanshan',
-            image: 'spritesheets/liukanshan.png',
+            image: 'spritesheets/liukanshan-sword.png',
+            displayScale: 0.6,
+            ...withCombatAnimationAliases(Presets.RMSpritesheet(3, 4))
+          },
+          {
+            id: 'liukanshan-sword-slash',
+            image: 'spritesheets/liukanshan-sword-slash.png',
+            displayScale: 0.6,
+            ...withCombatAnimationAliases(Presets.RMSpritesheet(3, 4))
+          },
+          {
+            id: 'liukanshan-pensord',
+            image: 'spritesheets/liukanshan-pensord.png',
             displayScale: 0.6,
             ...Presets.RMSpritesheet(3, 4)
           },

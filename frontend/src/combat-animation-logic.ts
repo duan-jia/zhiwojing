@@ -8,13 +8,13 @@ export type CombatAnimationKey = typeof COMBAT_ANIMATION_KEYS[number]
  * character. Keep the attacker visible and explicitly disable every other
  * optional animation that this spritesheet cannot render.
  */
-export function resolveCombatAnimation(key: CombatAnimationKey): 'stand' | null {
-  return key === 'attack' ? 'stand' : null
+export function resolveCombatAnimation(key: CombatAnimationKey): 'stand' | { animationName: string; graphic: string } | null {
+  return key === 'attack' ? { animationName: 'walk', graphic: 'liukanshan-sword-slash' } : null
 }
 
 export const combatAnimations = Object.fromEntries(
   COMBAT_ANIMATION_KEYS.map(key => [key, resolveCombatAnimation(key)]),
-) as Record<CombatAnimationKey, 'stand' | null>
+) as Record<CombatAnimationKey, 'stand' | { animationName: string; graphic: string } | null>
 
 /** A rendering-level safety net for animation names synced by older servers. */
 export function withCombatAnimationAliases<T extends { textures?: Record<string, unknown> }>(spritesheet: T): T {

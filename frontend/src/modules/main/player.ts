@@ -6,6 +6,7 @@ import type {
 import { disposeAgent, enableAgent, takeControl, toggleAgent } from './autonomy.ts'
 import { handleAutonomyInput } from './player-input.ts'
 import { clearRespawnTimer, initializeCombatPlayer, revivePlayer } from './combat'
+import { initializeStarterWeapon } from './weapons'
 
 const profiles = {
     1: { name: '体验用户', graphic: 'liukanshan' },
@@ -45,6 +46,7 @@ export const player: RpgPlayerHooks = {
         actionPlayer.on('revive', () => revivePlayer(player))
         initializeCombatPlayer(player)
         await player.changeMap('nature-open-world', 'start')
+        initializeStarterWeapon(player)
     },
     onJoinMap(player: RpgPlayer) {
         const synchronizedPlayer = player as RpgPlayer & {

@@ -1,6 +1,6 @@
 import type { RpgPlayer } from '@rpgjs/server'
 import { setActionBattleInvincibility } from '@rpgjs/action-battle/server'
-import { AUTONOMOUS_RESPAWN_MS, PLAYER_ATTACK_DAMAGE, PLAYER_MAX_HP, RESPAWN_INVINCIBILITY_MS, applyFixedDamage, canTargetCombatPlayer, isDefeated, restoreCombatPlayer, shouldAutoRespawn } from '../../combat-state'
+import { AUTONOMOUS_RESPAWN_MS, PLAYER_ATTACK_DAMAGE, PLAYER_MAX_HP, RESPAWN_INVINCIBILITY_MS, applyCombatDamage, canTargetCombatPlayer, isDefeated, restoreCombatPlayer, shouldAutoRespawn } from '../../combat-state'
 import { pauseAgent, resumeAgent } from './autonomy'
 import { combatAnimations } from '../../combat-animation-logic'
 
@@ -15,7 +15,9 @@ function setProp(player: any, key: string, value: boolean) {
 export function initializeCombatPlayer(player: RpgPlayer) {
   player.setParameter('maxHp', PLAYER_MAX_HP)
   player.hp = PLAYER_MAX_HP
-  ;(player as any).actionBattleTargets = 'players'
+  // Include map events in the broad candidate query; canTargetCombatPlayer
+  // still restricts actual hits to explicitly marked combat NPCs.
+  ;(player as any).actionBattleTargets = 'all'
   setProp(player, 'defeated', false)
 }
 
@@ -59,7 +61,10 @@ export const actionBattleOptions = {
     targets: {
       canTarget: ({ attacker, target }: any) => canTargetCombatPlayer(attacker, target),
     },
-    damage: ({ target }: any) => applyFixedDamage(target, PLAYER_ATTACK_DAMAGE),
+    damage: ({ target, multiplier }: any) => applyCombatDamage(
+      target,
+      PLAYER_ATTACK_DAMAGE * (Number.isFinite(multiplier) ? multiplier : 1),
+    ),
     hooks: {
       afterHit: (result: any) => { if (result.defeated) defeatPlayer(result.target) },
     },
@@ -69,7 +74,7 @@ export const actionBattleOptions = {
   },
   ai: { director: false as const },
   skills: { defaultAoeMask: ['#'] },
-  targeting: { affects: 'players' as const, allowEmptyTarget: true },
+  targeting: { affects: 'both' as const, allowEmptyTarget: true },
   ui: { hotbar: { enabled: false, autoOpen: false }, actionBar: { enabled: false }, targeting: { enabled: false } },
   feedback: { hitStop: true, flashes: true, screenShake: true, damageNumbers: true },
 }
