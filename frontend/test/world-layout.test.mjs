@@ -16,17 +16,18 @@ const decode = (xml, name) => {
 }
 const cell = (a,x,y) => a[y*W+x]
 
-test('town map has the compact 64x48 four-layer Tiled layout', async () => {
+test('town map has the compact 64x48 layered Tiled layout', async () => {
   const xml = await readFile(mapPath, 'utf8')
   assert.match(xml, /width="64" height="48" tilewidth="32" tileheight="32"/)
-  for (const name of ['Ground','Terrain','Buildings','Nature']) decode(xml,name)
+  for (const name of ['Ground','Terrain','Buildings','Facade','Nature']) decode(xml,name)
+  assert.match(xml, /<layer[^>]*name="Buildings"[^>]*visible="0"/)
   assert.match(xml, /<objectgroup[^>]*name="Objects"/)
-  assert.match(xml, /name="start"[^>]*x="928" y="832"/)
+  assert.match(xml, /name="start"[^>]*x="832" y="448"/)
 })
 
 test('five facades have approved footprints, signs, collision, and clear approaches', async () => {
   const xml = await readFile(mapPath, 'utf8')
-  const buildings = decode(xml,'Buildings'), terrain = decode(xml,'Terrain')
+  const buildings = decode(xml,'Buildings'), facade = decode(xml,'Facade'), terrain = decode(xml,'Terrain')
   const plans = [
     ['知我居',12,10,16,14,14,15], ['创作坊',24,8,28,12,26,13],
     ['邮局',36,10,40,14,38,15], ['茶馆',10,29,14,33,12,28],
@@ -35,9 +36,14 @@ test('five facades have approved footprints, signs, collision, and clear approac
   for (const [name,x1,y1,x2,y2,dx,dy] of plans) {
     assert.match(xml, new RegExp(`name="${name}"[^>]*x="${dx*TILE}" y="${dy*TILE}"`))
     for (let y=y1;y<=y2;y++) for (let x=x1;x<=x2;x++) assert.notEqual(cell(buildings,x,y),0,`${name} wall ${x},${y}`)
+    for (let y=y1;y<=y2;y++) for (let x=x1;x<=x2;x++) assert.notEqual(cell(facade,x,y),0,`${name} facade ${x},${y}`)
     assert.equal(cell(buildings,dx,dy),0,`${name} approach`)
     assert.equal(cell(terrain,dx,dy),4279,`${name} approach path`)
   }
+  assert.deepEqual([cell(facade,12,10),cell(facade,12,11)],[352,360])
+  assert.deepEqual([cell(facade,24,8),cell(facade,24,9)],[352,370])
+  assert.deepEqual([cell(facade,37,12),cell(facade,39,12)],[337,338])
+  assert.equal(cell(facade,14,13),383); assert.equal(cell(facade,14,14),383)
 })
 
 test('water boundary collides visually and roads, spawn, landmarks remain aligned', async () => {
@@ -46,6 +52,7 @@ test('water boundary collides visually and roads, spawn, landmarks remain aligne
   for (let y=0;y<H;y++) { assert.equal(cell(terrain,0,y),1455); assert.equal(cell(terrain,W-1,y),1455) }
   assert.equal(cell(terrain,29,26),4279)
   assert.equal(cell(terrain,29,22),4279)
+  assert.equal(cell(terrain,24,20),4255)
   assert(nature.filter(Boolean).length >= 30)
   const landmarks = await readFile(join(root,'src','landmarks.ts'),'utf8')
   assert.match(landmarks,/x: 928, y: 704/); assert.match(landmarks,/x: 448, y: 480/)
