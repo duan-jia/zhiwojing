@@ -10,7 +10,9 @@ const projectRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 async function loadTypeScriptModule(relativePath) {
   const path = join(projectRoot, relativePath)
   let source = await readFile(path, 'utf8')
-  if (relativePath.endsWith('player.ts')) source = source.replace(/import \{ enableAgent, takeControl, toggleAgent \} from '.\/autonomy'/, 'const enableAgent=()=>{}; const takeControl=()=>{}; const toggleAgent=()=>{}')
+  if (relativePath.endsWith('player.ts')) source = source
+    .replace(/import \{ enableAgent, takeControl, toggleAgent \} from '.\/autonomy'/, 'const enableAgent=()=>{}; const takeControl=()=>{}; const toggleAgent=()=>{}')
+    .replace(/import \{ clearRespawnTimer, initializeCombatPlayer, revivePlayer \} from '.\/combat'/, 'const clearRespawnTimer=()=>{}; const initializeCombatPlayer=()=>{}; const revivePlayer=()=>{}')
   const result = await transformWithOxc(source, path)
   const url = `data:text/javascript;base64,${Buffer.from(result.code).toString('base64')}`
   return import(url)

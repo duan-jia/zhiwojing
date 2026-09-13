@@ -4,16 +4,23 @@ import { provideTiledMap } from "@rpgjs/tiledmap/client";
 import { setupDialogueInteractions } from '../dialogue-interactions'
 import { setupAgentBubbles } from '../agent-bubbles'
 import { setupAutonomyInput } from '../autonomy-input'
+import { provideActionBattle } from '@rpgjs/action-battle/client'
+import { actionBattleOptions } from '../modules/main/combat'
+import { setupCombatInput } from '../combat-input'
+import { setupCombatHud } from '../combat-hud'
 
 let bubbleController: ReturnType<typeof setupAgentBubbles> | null = null
 let dialogueController: ReturnType<typeof setupDialogueInteractions> | null = null
 let autonomyInputController: ReturnType<typeof setupAutonomyInput> | null = null
+let combatInputController: ReturnType<typeof setupCombatInput> | null = null
+let combatHudController: ReturnType<typeof setupCombatHud> | null = null
 
 export default {
   providers: [
     provideTiledMap({
       basePath: "map",
     }),
+    provideActionBattle(actionBattleOptions),
     provideClientGlobalConfig({
       keyboardControls: {
         up: ['up', 'w'],
@@ -31,12 +38,17 @@ export default {
           onStart(engine) {
             autonomyInputController?.destroy()
             autonomyInputController = setupAutonomyInput(engine)
+            combatInputController?.destroy()
+            combatInputController = setupCombatInput(engine)
+            combatHudController?.destroy()
+            combatHudController = setupCombatHud(engine)
             dialogueController = setupDialogueInteractions(engine)
             bubbleController = setupAgentBubbles(engine)
           },
           onStep() {
             dialogueController?.step()
             bubbleController?.step()
+            combatHudController?.step()
           },
         },
         spritesheets: [

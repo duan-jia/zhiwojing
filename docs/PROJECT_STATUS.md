@@ -35,6 +35,7 @@ FastAPI 不再持有地图、房间、角色位置或 WebSocket 移动状态；`
 - Agent 默认使用 OpenAI 兼容地址 `https://api.openai-next.com/v1` 和模型 `deepseek-v4-flash`。本地模型 Key 与知乎 Access Secret 统一保存在仓库外的 `~/.config/zhiwojing/secrets.env`，并由 `run-local.sh` 在启动时读取；生产环境仍由部署平台注入 Secret。
 - `POST /api/agent/init` 与 `/api/agent/step` 仍为 HTTP 501 契约占位。
 - 默认数据库初始化体验用户、苏晚、周博 3 个不同兴趣和表达风格的 mock 分身。
+- PvP v1 已接入 `@rpgjs/action-battle`：J 键固定 25 伤害，玩家 100 HP，包含框架命中/击退/无敌帧/伤害弹字；倒地暂停控制和自治，真人可原地复活，挂机分身 30 秒自动复活。规则和扩展点见 [ACTION_BATTLE.md](./ACTION_BATTLE.md)。
 
 ## 运行与构建
 

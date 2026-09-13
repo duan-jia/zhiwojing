@@ -54,6 +54,11 @@ function isTalking(player: AgentPlayer) {
   return Boolean((player as unknown as { isInDialogue?: boolean }).isInDialogue) || states.get(String(player.id))?.busy === true
 }
 
+function defeated(player: AgentPlayer) {
+  const prop = (player as any).defeated
+  return Boolean(typeof prop === 'function' ? prop() : prop)
+}
+
 async function post<T>(path: string, body: object): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
@@ -87,7 +92,7 @@ function clearArrival(state: State) {
 }
 
 function scheduleIdleWake(player: AgentPlayer) {
-  if (!value(player.agentMode)) return
+  if (!value(player.agentMode) || defeated(player)) return
   const state = stateFor(player)
   if (state.idleTimer) clearTimeout(state.idleTimer)
   state.idleTimer = setTimeout(() => {
@@ -99,7 +104,7 @@ function scheduleIdleWake(player: AgentPlayer) {
 function scheduleMeetingCheck(player: AgentPlayer) {
   const state = stateFor(player)
   if (state.meetingTimer) clearTimeout(state.meetingTimer)
-  if (!value(player.agentMode)) return
+  if (!value(player.agentMode) || defeated(player)) return
   state.meetingTimer = setTimeout(() => {
     state.meetingTimer = undefined
     if (nearby(player).length > 0) void advanceAgent(player, 'meeting')
@@ -108,9 +113,10 @@ function scheduleMeetingCheck(player: AgentPlayer) {
 }
 
 function nearby(player: AgentPlayer) {
+  if (defeated(player)) return []
   const here = position(player)
   return roomPlayers(player)
-    .filter(other => other.id !== player.id)
+    .filter(other => other.id !== player.id && !defeated(other))
     .map(other => ({ other, distance: Math.hypot(position(other).x - here.x, position(other).y - here.y) }))
     .filter(item => item.distance <= MEETING_DISTANCE)
 }
@@ -176,7 +182,7 @@ function watchArrival(player: AgentPlayer, state: State) {
 }
 
 export async function advanceAgent(player: AgentPlayer, event: 'enabled' | 'arrived' | 'meeting' | 'idle') {
-  if (!value(player.agentMode)) return
+  if (!value(player.agentMode) || defeated(player)) return
   const state = stateFor(player)
   const encounter = nearby(player)[0]
   if (encounter && await meet(player, encounter.other)) return
@@ -225,4 +231,20 @@ export function takeControl(player: AgentPlayer) {
 export function toggleAgent(player: AgentPlayer) {
   if (value(player.agentMode)) takeControl(player)
   else enableAgent(player)
+}
+
+export function pauseAgent(player: AgentPlayer) {
+  player.stopMoveTo()
+  const state = states.get(String(player.id))
+  if (!state) return
+  clearArrival(state)
+  if (state.idleTimer) clearTimeout(state.idleTimer)
+  if (state.meetingTimer) clearTimeout(state.meetingTimer)
+  state.busy = false
+}
+
+export function resumeAgent(player: AgentPlayer) {
+  if (!value(player.agentMode) || defeated(player)) return
+  scheduleMeetingCheck(player)
+  scheduleIdleWake(player)
 }
