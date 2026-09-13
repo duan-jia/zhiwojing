@@ -29,15 +29,21 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y git curl nginx python3 python3-venv python3-pip certbot python3-certbot-nginx
 
-command -v node >/dev/null || {
-  echo "未检测到 Node.js。请先安装 Node.js 22+（推荐 NodeSource 或 nvm），再重新运行此脚本。" >&2
-  exit 1
-}
-command -v npm >/dev/null || { echo "未检测到 npm。请先安装 Node.js 22+。" >&2; exit 1; }
+if ! command -v node >/dev/null || ! command -v npm >/dev/null; then
+  echo "未检测到 Node.js，正在安装 Node.js 22……"
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+  apt-get install -y nodejs
+fi
 node_bin="$(command -v node)"
 npm_bin="$(command -v npm)"
 node_major="$(node -p 'process.versions.node.split(".")[0]')"
-(( node_major >= 22 )) || { echo "需要 Node.js 22+，当前为 $(node --version)。" >&2; exit 1; }
+if (( node_major < 22 )); then
+  echo "当前 Node.js 为 $(node --version)，正在升级到 Node.js 22……"
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+  apt-get install -y nodejs
+  node_major="$(node -p 'process.versions.node.split(".")[0]')"
+fi
+(( node_major >= 22 )) || { echo "Node.js 安装失败，需要 22+，当前为 $(node --version)。" >&2; exit 1; }
 
 [[ -d "${backend_dir}" && -d "${frontend_dir}" ]] || { echo "脚本必须在项目仓库内运行。" >&2; exit 1; }
 
