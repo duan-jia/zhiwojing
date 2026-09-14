@@ -43,6 +43,8 @@ from .zhihu.models import (
 )
 
 engine = create_engine("sqlite:///./avatar.db", connect_args={"check_same_thread": False})
+# Temporary hackathon OAuth grants stay server-side and expire with the token.
+oauth_grants: dict[str, dict[str, object]] = {}
 
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -162,6 +164,8 @@ class OAuthStatusResponse(BaseModel):
     missingConfiguration: list[str]
     interfaces: list[OAuthInterface]
     user: dict[str, object] | None = None
+    profileAvailable: bool = False
+    profileWarning: dict[str, object] | None = None
 
 
 OAUTH_INTERFACES = [
@@ -261,7 +265,9 @@ async def _oauth_exchange(code: str) -> dict[str, object]:
             payload = response.json()
     except (httpx.HTTPError, ValueError) as error:
         raise HTTPException(502, detail={"code": "OAUTH_TOKEN_EXCHANGE_FAILED", "message": "知乎授权暂时失败，请稍后重试。"}) from error
-    if not isinstance(payload, dict) or not payload.get("access_token"):
+    if isinstance(payload, dict) and not payload.get("access_token"):
+        payload = payload.get("data") or payload.get("Data") or payload
+    if not isinstance(payload, dict) or not isinstance(payload.get("access_token"), str) or not payload["access_token"].strip():
         raise HTTPException(502, detail={"code": "OAUTH_INVALID_TOKEN_RESPONSE", "message": "知乎返回的授权信息无效。"})
     return payload
 
@@ -279,6 +285,7 @@ async def _oauth_profile(access_token: str) -> dict[str, object]:
             "X-OAuth-Token": access_token,
             "Authorization": f"Bearer {access_secret}",
             "Content-Type": "application/json",
+            "X-Request-Timestamp": str(int(datetime.now(timezone.utc).timestamp())),
         }
         async with httpx.AsyncClient(timeout=15) as client:
             response = await client.get(endpoint, headers=headers)
@@ -286,11 +293,18 @@ async def _oauth_profile(access_token: str) -> dict[str, object]:
             payload = response.json()
     except (httpx.HTTPError, ValueError) as error:
         raise HTTPException(502, detail={"code": "OAUTH_PROFILE_FAILED", "message": "无法读取知乎账号信息。"}) from error
+    # Distinguish upstream business errors from malformed successful profiles.
+    envelope = {str(key).lower(): value for key, value in payload.items()} if isinstance(payload, dict) else {}
+    upstream_code = envelope.get("code")
+    if isinstance(upstream_code, (int, str)) and str(upstream_code) not in ("0", "200", "20000"):
+        raise HTTPException(502, detail={"code": "OAUTH_PROFILE_FAILED", "message": "知乎账号信息接口返回错误，请重新授权。", "failedStage": "profile_response", "upstreamCode": upstream_code})
     profile: object = payload
     # `/user` has been observed with lower/upper-case wrappers and, on some
     # deployments, JSON-encoded `data`. Find the first nested object carrying
     # a stable identifier without exposing the upstream payload.
-    def find_profile(value: object) -> dict[str, object] | None:
+    def find_profile(value: object, depth: int = 0) -> dict[str, object] | None:
+        if depth > 8:
+            return None
         if isinstance(value, str):
             try:
                 value = json.loads(value)
@@ -301,12 +315,12 @@ async def _oauth_profile(access_token: str) -> dict[str, object]:
             if any(normalized.get(key) for key in ("id", "user_id", "userid", "url_token", "urltoken")):
                 return {str(key): item for key, item in value.items()}
             for item in value.values():
-                found = find_profile(item)
+                found = find_profile(item, depth + 1)
                 if found is not None:
                     return found
         elif isinstance(value, list):
             for item in value:
-                found = find_profile(item)
+                found = find_profile(item, depth + 1)
                 if found is not None:
                     return found
         return None
@@ -326,7 +340,14 @@ async def _oauth_profile(access_token: str) -> dict[str, object]:
         # Key names are safe diagnostic metadata; values are intentionally
         # omitted so no profile or token data can leak through the error.
         keys = sorted(str(key) for key in profile.keys())[:30]
-        raise HTTPException(502, detail={"code": "OAUTH_INVALID_PROFILE", "message": "知乎返回的账号信息无效。", "failedStage": "profile_parse", "profileKeys": keys})
+        data = envelope.get("data")
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except ValueError:
+                pass
+        data_fields = {str(key)[:80]: type(value).__name__ for key, value in list(data.items())[:30]} if isinstance(data, dict) else {}
+        raise HTTPException(502, detail={"code": "OAUTH_INVALID_PROFILE", "message": "知乎返回的账号信息无效。", "failedStage": "profile_parse", "profileKeys": keys, "upstreamCode": upstream_code if isinstance(upstream_code, int) else None, "dataType": type(data).__name__, "dataFields": data_fields})
     return {**profile, "id": profile_id}
 
 app = FastAPI(title="数字分身 API", version="0.1.0")
@@ -527,6 +548,7 @@ async def auth_logout(request: Request):
     authenticated = _authenticated(request)
     if authenticated is None:
         raise _auth_error("INVALID_TOKEN", "登录凭证无效、已过期或已注销。")
+    oauth_grants.pop(authenticated[1].token_hash, None)
     with Session(engine) as session:
         auth_session = session.get(AuthSession, authenticated[1].id)
         auth_session.revoked_at = datetime.now(timezone.utc)
@@ -541,6 +563,15 @@ async def auth_verify(request: Request):
     if authenticated is None:
         raise _auth_error("INVALID_TOKEN", "登录凭证无效、已过期或已注销。")
     return {"valid": True, "user": _user_response(authenticated[0])}
+
+
+@app.post("/api/auth/session")
+async def auth_browser_session(request: Request):
+    authenticated = _authenticated(request)
+    if authenticated is None:
+        raise _auth_error()
+    # Only the local application credential is shared with the RPG transport.
+    return JSONResponse({"token": _token_from_request(request), "user": _user_response(authenticated[0])}, headers={"Cache-Control": "no-store"})
 
 @app.post("/api/agent/chat", response_model=AgentChatResponse)
 async def agent_chat(payload: AgentChatRequest, request: Request):
@@ -867,14 +898,20 @@ async def zhihu_creator_stats():
 async def oauth_status(request: Request):
     configuration = oauth_configuration()
     authenticated = _authenticated(request)
+    grant = oauth_grants.get(authenticated[1].token_hash) if authenticated else None
+    if grant and grant["expires_at"] <= datetime.now(timezone.utc):
+        oauth_grants.pop(authenticated[1].token_hash, None)
+        grant = None
     return OAuthStatusResponse(
         configured=bool(configuration["configured"]),
         callbackConfigured=bool(configuration["callback_configured"]),
         integrationReady=bool(configuration["configured"]),
-        authorized=authenticated is not None and authenticated[0].kind == "zhihu",
+        authorized=authenticated is not None and authenticated[0].kind == "zhihu" and grant is not None,
         missingConfiguration=list(configuration["missing"]),
         interfaces=OAUTH_INTERFACES,
         user=_user_response(authenticated[0]) if authenticated is not None and authenticated[0].kind == "zhihu" else None,
+        profileAvailable=bool(grant and grant["profile_available"]),
+        profileWarning=grant.get("profile_warning") if grant else None,
     )
 
 
@@ -906,12 +943,21 @@ async def oauth_callback(request: Request, code: str | None = None, authorizatio
         session.delete(row)
         session.commit()
     token_payload = await _oauth_exchange(code)
-    profile = await _oauth_profile(str(token_payload["access_token"]))
-    zhihu_id = str(profile["id"])
+    profile_warning = None
+    try:
+        profile = await _oauth_profile(str(token_payload["access_token"]))
+    except HTTPException as error:
+        if error.status_code != 502:
+            raise
+        profile = {}
+        profile_warning = error.detail
+    # A local avatar can exist without a remote identity. Never merge unknown
+    # profiles or invent a Zhihu identifier from names, tokens or email.
+    zhihu_id = str(profile["id"]) if profile.get("id") else None
     profile_values = {str(key).lower(): value for key, value in profile.items()}
     name = str(profile_values.get("name") or profile_values.get("fullname") or profile_values.get("url_token") or profile_values.get("urltoken") or "知乎用户")[:100]
     with Session(engine) as session:
-        user = session.exec(select(User).where(User.zhihu_id == zhihu_id)).first()
+        user = session.exec(select(User).where(User.zhihu_id == zhihu_id)).first() if zhihu_id else None
         if user is None:
             user = User(zhihu_id=zhihu_id, kind="zhihu", name=name)
             session.add(user)
@@ -920,6 +966,16 @@ async def oauth_callback(request: Request, code: str | None = None, authorizatio
             user.kind, user.name, user.updated_at = "zhihu", name, datetime.now(timezone.utc)
         token = _issue_token(session, user.id)
         session.commit()
+    try:
+        expires_in = max(0, int(token_payload.get("expires_in", 3600)))
+    except (TypeError, ValueError):
+        expires_in = 3600
+    oauth_grants[hashlib.sha256(token.encode()).hexdigest()] = {
+        "access_token": token_payload["access_token"],
+        "expires_at": datetime.now(timezone.utc) + timedelta(seconds=expires_in),
+        "profile_available": bool(profile),
+        "profile_warning": profile_warning,
+    }
     target = os.getenv("ZHIHU_OAUTH_SUCCESS_REDIRECT", "/")
     response = RedirectResponse(target, status_code=303)
     response.set_cookie("session_token", token, httponly=True, secure=request.url.scheme == "https", samesite="lax", max_age=30 * 86400)
@@ -927,17 +983,52 @@ async def oauth_callback(request: Request, code: str | None = None, authorizatio
 
 
 @app.post("/api/oauth/run-all")
-async def oauth_run_all():
-    raise HTTPException(
-        401,
-        detail={"code": "LOGIN_REQUIRED", "message": "请先完成知乎账号授权。"},
-    )
+async def oauth_run_all(request: Request):
+    authenticated = _authenticated(request)
+    grant = oauth_grants.get(authenticated[1].token_hash) if authenticated else None
+    if not grant or grant["expires_at"] <= datetime.now(timezone.utc):
+        raise HTTPException(401, detail={"code": "LOGIN_REQUIRED", "message": "请先完成知乎账号授权。"})
+    headers = {
+        "Authorization": f"Bearer {os.getenv('ZHIHU_ACCESS_SECRET', '').strip()}",
+        "X-OAuth-Token": str(grant["access_token"]),
+        "X-Request-Timestamp": str(int(datetime.now(timezone.utc).timestamp())),
+    }
+    results = []
+    favlist_token = None
+    async with httpx.AsyncClient(timeout=15) as client:
+        for definition in OAUTH_INTERFACES:
+            kind = definition.id
+            params = {"Limit": "1"}
+            if kind == "contents":
+                params["ContentType"] = "all"
+            if kind == "favlist_contents":
+                if not favlist_token:
+                    results.append({"id": kind, "status": "empty", "item": None})
+                    continue
+                params["FavlistUrlToken"] = str(favlist_token)
+            try:
+                response = await client.get(f"https://developer.zhihu.com/api/v1/user/{kind}", params=params, headers=headers)
+                response.raise_for_status()
+                payload = response.json()
+                if not isinstance(payload, dict) or payload.get("Code") != 0:
+                    raise ValueError("upstream business failure")
+                items = payload["Data"]["Items"]
+                if not isinstance(items, list):
+                    raise ValueError("invalid items")
+                item = items[0] if items else None
+                if kind == "favlists" and isinstance(item, dict):
+                    favlist_token = item.get("UrlToken")
+                results.append({"id": kind, "status": "success" if item else "empty", "item": item})
+            except (httpx.HTTPError, ValueError, KeyError, TypeError):
+                results.append({"id": kind, "status": "error", "item": None, "message": "知乎用户接口暂不可用。"})
+    return {"results": results}
 
 
 @app.post("/api/oauth/logout")
 async def oauth_logout(request: Request):
     authenticated = _authenticated(request)
     if authenticated is not None:
+        oauth_grants.pop(authenticated[1].token_hash, None)
         with Session(engine) as session:
             auth_session = session.get(AuthSession, authenticated[1].id)
             if auth_session is not None:

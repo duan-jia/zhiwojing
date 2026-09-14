@@ -68,3 +68,62 @@ test('lightweight panels explicitly override the RPG UI reset text color', async
 
   assert.match(styles, /\.thread-messages \.mine p\s*\{[^}]*color:\s*#fff[^}]*background:\s*#1772f6/s)
 })
+
+// Execute the login controller with a minimal DOM so retries and visibility
+// are checked as behavior, independently of the RPG renderer.
+async function loginHarness(respond) {
+  const { default: ts } = await import('typescript')
+  const { runInNewContext } = await import('node:vm')
+  class Element {
+    hidden = false
+    disabled = false
+    listeners = new Map()
+    querySelector(selector) { return elements[selector] }
+    addEventListener(event, callback, options) { this.listeners.set(event, { callback, options }) }
+    async click() {
+      if (this.disabled) return
+      const listener = this.listeners.get('click')
+      if (listener?.options?.once) this.listeners.delete('click')
+      await listener?.callback()
+    }
+  }
+  const elements = Object.fromEntries(['#login-root', '#rpg', '.oauth-login-button', 'strong', 'small', '.enter-game-button', '.login-status'].map(key => [key, new Element()]))
+  elements['#rpg'].hidden = true
+  const source = (await readFile(join(projectRoot, 'src/login.ts'), 'utf8')).replace('import.meta.env.VITE_API_URL', '"http://test"')
+  const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+  const exports = {}
+  const storage = new Map()
+  runInNewContext(code, {
+    exports, require: () => ({ DEFAULT_IDENTITY: { id: 1 }, setActiveIdentity() {} }),
+    document: { querySelector: selector => elements[selector] },
+    window: { localStorage: { setItem: (key, value) => storage.set(key, value) } },
+    fetch: respond, AbortSignal,
+  })
+  const result = exports.showLogin()
+  return { elements, result, storage }
+}
+
+test('guest failure can be retried and successful login reveals the game', async () => {
+  let attempts = 0
+  const harness = await loginHarness(async url => {
+    if (url.endsWith('/status')) return { ok: true, json: async () => ({ integrationReady: false }) }
+    attempts += 1
+    return { ok: attempts > 1, json: async () => ({ token: 'guest-token', user: { id: 4, name: '游客' } }) }
+  })
+  const button = harness.elements['.enter-game-button']
+  await button.click()
+  assert.equal(button.disabled, false)
+  assert.equal(harness.elements['#rpg'].hidden, true)
+  await button.click()
+  assert.equal((await harness.result).id, 4)
+  assert.equal(harness.elements['#login-root'].hidden, true)
+  assert.equal(harness.elements['#rpg'].hidden, false)
+  assert.equal(harness.storage.get('zhiwojing.auth-token'), 'guest-token')
+})
+
+test('authorized OAuth return reveals the game', async () => {
+  const harness = await loginHarness(async url => ({ ok: true, json: async () => url.endsWith('/session') ? { token: 'oauth-session' } : ({ authorized: true, integrationReady: true, user: { id: 5, name: '知乎用户' } }) }))
+  assert.equal((await harness.result).id, 5)
+  assert.equal(harness.elements['#login-root'].hidden, true)
+  assert.equal(harness.elements['#rpg'].hidden, false)
+})

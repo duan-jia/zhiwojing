@@ -64,7 +64,17 @@ export function showLogin(): Promise<MockIdentity> {
   const guestButton = root.querySelector<HTMLButtonElement>('.enter-game-button')
   const status = root.querySelector<HTMLElement>('.login-status')
   let resolveLogin: ((identity: MockIdentity) => void) | undefined
+  let entered = false
+  const enterGame = (identity: MockIdentity) => {
+    if (entered) return
+    entered = true
+    setActiveIdentity(identity)
+    root.hidden = true
+    game.hidden = false
+    resolveLogin?.(identity)
+  }
   guestButton?.addEventListener('click', async () => {
+    if (entered || guestButton.disabled) return
     guestButton.disabled = true
     guestButton.textContent = '正在进入知我境…'
     try {
@@ -80,14 +90,13 @@ export function showLogin(): Promise<MockIdentity> {
       const identity: MockIdentity = result.user?.id
         ? { id: result.user.id, name: result.user.name || '游客', tagline: '知我境体验用户' }
         : selectedIdentity
-      setActiveIdentity(identity)
-      resolveLogin?.(identity)
+      enterGame(identity)
     } catch {
       guestButton.disabled = false
       guestButton.innerHTML = '<span>▶</span> 游客体验'
       if (status) status.textContent = '游客登录失败，请稍后重试。'
     }
-  }, { once: true })
+  })
   void fetch(`${API}/api/oauth/status`, {
     credentials: 'include',
     signal: AbortSignal.timeout(5000),
@@ -96,7 +105,8 @@ export function showLogin(): Promise<MockIdentity> {
       if (!response.ok) throw new Error('OAuth status unavailable')
       return response.json() as Promise<OAuthStatus>
     })
-    .then(oauth => {
+    .then(async oauth => {
+      if (entered) return
       if (!oauthButton || !oauthLabel || !oauthDetail) return
       oauthButton.disabled = !oauth.integrationReady
       oauthLabel.textContent = oauth.integrationReady
@@ -122,15 +132,23 @@ export function showLogin(): Promise<MockIdentity> {
         }
       }
       if (oauth.authorized) {
+        const sessionResponse = await fetch(`${API}/api/auth/session`, {
+          method: 'POST', credentials: 'include', signal: AbortSignal.timeout(5000),
+        })
+        if (!sessionResponse.ok) throw new Error('OAuth session unavailable')
+        const session = await sessionResponse.json() as { token: string }
+        if (!session.token) throw new Error('OAuth session missing token')
+        if (entered) return
+        window.localStorage.setItem('zhiwojing.auth-token', session.token)
         const user = oauth.user
         const identity: MockIdentity = user
           ? { id: user.id, name: user.name, tagline: user.profile?.interests?.join('、') || '知乎用户' }
           : selectedIdentity
-        setActiveIdentity(identity)
-        resolveLogin?.(identity)
+        enterGame(identity)
       }
     })
     .catch(() => {
+      if (entered) return
       if (oauthLabel) oauthLabel.textContent = '知乎登录暂不可用'
       if (oauthDetail) oauthDetail.textContent = '认证服务暂时不可用'
       if (status) status.textContent = '暂时无法读取知乎认证状态，请稍后刷新。'

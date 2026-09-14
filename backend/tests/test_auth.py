@@ -92,3 +92,39 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
         with Session(main.engine) as session:
             self.assertIsNone(session.get(main.Presence, b))
             self.assertTrue(session.get(main.Presence, a).online)
+
+    async def test_oauth_profile_failure_does_not_block_login_or_user_apis(self):
+        from unittest.mock import AsyncMock
+        from fastapi import HTTPException
+        from urllib.parse import parse_qs, urlparse
+
+        with patch.object(main, '_oauth_ready'), patch.object(main, '_oauth_exchange', AsyncMock(return_value={'access_token': 'upstream-secret', 'expires_in': 3600})), patch.object(main, '_oauth_profile', AsyncMock(side_effect=HTTPException(502, detail={'code': 'OAUTH_INVALID_PROFILE'}))):
+            start = await self.client.get('/api/oauth/start')
+            state = parse_qs(urlparse(start.headers['location']).query)['state'][0]
+            callback = await self.client.get('/auth/callback', params={'authorization_code': 'test-code', 'state': state})
+        self.assertEqual(callback.status_code, 303)
+        status = (await self.client.get('/api/oauth/status')).json()
+        self.assertTrue(status['authorized'])
+        self.assertFalse(status['profileAvailable'])
+        self.assertNotIn('upstream-secret', str(status))
+        with Session(main.engine) as session:
+            self.assertIsNone(session.get(main.User, status['user']['id']).zhihu_id)
+        browser_session = (await self.client.post('/api/auth/session')).json()
+        self.assertNotEqual(browser_session['token'], 'upstream-secret')
+        verified = await self.client.post('/api/auth/verify', headers=self.headers(browser_session['token']))
+        self.assertEqual(verified.json()['user']['id'], status['user']['id'])
+        requests = []
+        def respond(request):
+            requests.append(request)
+            self.assertEqual(request.headers['X-OAuth-Token'], 'upstream-secret')
+            items = [{'UrlToken': 123}] if request.url.path.endswith('/favlists') else []
+            return httpx.Response(200, json={'Code': 0, 'Data': {'Items': items}})
+        upstream = httpx.AsyncClient(transport=httpx.MockTransport(respond))
+        with patch.object(main.httpx, 'AsyncClient', return_value=upstream):
+            result = await self.client.post('/api/oauth/run-all')
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(len(requests), 5)
+        self.assertNotIn('upstream-secret', result.text)
+        await self.client.post('/api/oauth/logout')
+        self.assertFalse((await self.client.get('/api/oauth/status')).json()['authorized'])
+        self.assertEqual((await self.client.post('/api/oauth/run-all')).status_code, 401)

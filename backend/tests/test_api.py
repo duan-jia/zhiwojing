@@ -306,7 +306,7 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(response.json()["detail"]["code"], "OAUTH_NOT_CONFIGURED")
                     self.assertNotIn("do-not-echo", response.text)
 
-    async def test_configured_oauth_skeleton_does_not_start_real_authorization(self):
+    async def test_configured_oauth_starts_real_authorization(self):
         configured_environment = {
             "ZHIHU_OAUTH_APP_ID": "123456",
             "ZHIHU_OAUTH_REDIRECT_URI": "https://example.com/auth/callback",
@@ -319,11 +319,12 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(status["configured"])
         self.assertTrue(status["callbackConfigured"])
-        self.assertFalse(status["integrationReady"])
+        self.assertTrue(status["integrationReady"])
         self.assertNotIn(configured_environment["ZHIHU_OAUTH_APP_KEY"], str(status))
         self.assertNotIn(configured_environment["ZHIHU_ACCESS_SECRET"], str(status))
-        self.assertEqual(response.status_code, 503)
-        self.assertEqual(response.json()["detail"]["code"], "OAUTH_NOT_IMPLEMENTED")
+        self.assertEqual(response.status_code, 307)
+        self.assertTrue(response.headers["location"].startswith("https://openapi.zhihu.com/authorize?"))
+        self.assertIn("state=", response.headers["location"])
 
     async def test_oauth_callback_configuration_requires_public_https(self):
         for redirect_uri in [
