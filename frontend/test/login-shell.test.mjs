@@ -71,7 +71,7 @@ test('lightweight panels explicitly override the RPG UI reset text color', async
 
 // Execute the login controller with a minimal DOM so retries and visibility
 // are checked as behavior, independently of the RPG renderer.
-async function loginHarness(respond) {
+async function loginHarness(respond, initialStorage = []) {
   const { default: ts } = await import('typescript')
   const { runInNewContext } = await import('node:vm')
   class Element {
@@ -92,11 +92,23 @@ async function loginHarness(respond) {
   const source = (await readFile(join(projectRoot, 'src/login.ts'), 'utf8')).replace('import.meta.env.VITE_API_URL', '"http://test"')
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const exports = {}
-  const storage = new Map()
+  const storage = new Map(initialStorage)
+  const localStorage = {
+    getItem: key => storage.get(key) ?? null,
+    setItem: (key, value) => storage.set(key, value),
+    removeItem: key => storage.delete(key),
+  }
   runInNewContext(code, {
-    exports, require: () => ({ DEFAULT_IDENTITY: { id: 1 }, setActiveIdentity() {} }),
+    exports,
+    require: specifier => specifier === './api'
+      ? {
+          readAuthToken: () => localStorage.getItem('zhiwojing.auth-token') || '',
+          saveAuthToken: token => localStorage.setItem('zhiwojing.auth-token', token),
+          apiFetch: (url, init) => respond(url, init),
+        }
+      : { DEFAULT_IDENTITY: { id: 1 }, setActiveIdentity() {} },
     document: { querySelector: selector => elements[selector] },
-    window: { localStorage: { setItem: (key, value) => storage.set(key, value) } },
+    window: { localStorage },
     fetch: respond, AbortSignal,
   })
   const result = exports.showLogin()
@@ -127,4 +139,18 @@ test('authorized OAuth return reveals the game', async () => {
   assert.equal(harness.storage.get('zhiwojing.auth-token'), 'oauth-session')
   assert.equal(harness.elements['#login-root'].hidden, true)
   assert.equal(harness.elements['#rpg'].hidden, false)
+})
+
+test('stored guest session resumes through the authenticated me endpoint', async () => {
+  const requests = []
+  const harness = await loginHarness(async (url, init = {}) => {
+    requests.push({ url, init })
+    if (url.endsWith('/status')) return { ok: true, json: async () => ({ integrationReady: false }) }
+    if (url.endsWith('/me')) return { ok: true, json: async () => ({ id: 4, name: '游客' }) }
+    throw new Error(`unexpected request: ${url}`)
+  }, [['zhiwojing.auth-token', 'stored-guest-token']])
+  assert.equal((await harness.result).id, 4)
+  assert.equal(harness.elements['#login-root'].hidden, true)
+  assert.equal(harness.elements['#rpg'].hidden, false)
+  assert.equal(requests.some(request => request.url.endsWith('/me')), true)
 })

@@ -2,6 +2,7 @@ import { loadBuildingCatalog, type BuildingCapability, type BuildingCatalogItem 
 import { getActiveIdentity } from './identity'
 import type { LandmarkDefinition } from './landmarks'
 import { personaError, personaView } from './persona-logic.mjs'
+import { apiFetch } from './api'
 
 interface HotItem { title: string; url: string; thumbnailUrl: string; summary: string }
 interface SearchItem { title: string; url: string; contentText?: string; authorName?: string }
@@ -38,7 +39,7 @@ function renderStatus(message: string, failed = false): void {
 }
 
 async function responseJson(path: string, init?: RequestInit): Promise<Record<string, unknown>> {
-  const response = await fetch(`${API}${path}`, { credentials: 'include', signal: AbortSignal.timeout(10000), ...init })
+  const response = await apiFetch(`${API}${path}`, { signal: AbortSignal.timeout(10000), ...init })
   const body = await response.json().catch(() => ({})) as { detail?: { message?: string } }
   if (!response.ok) throw new Error(body.detail?.message || `服务返回 ${response.status}`)
   return body
@@ -155,7 +156,7 @@ async function generatePersona(): Promise<void> {
   const version = ++requestVersion
   renderStatus('正在阅读你的知乎足迹并生成人设…')
   try {
-    const response = await fetch(`${API}/api/memory/coldstart`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: getActiveIdentity().id }) })
+    const response = await apiFetch(`${API}/api/memory/coldstart`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: getActiveIdentity().id }) })
     const body = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(personaError(body, response.status))
     if (version === requestVersion) void loadPersona(++requestVersion)

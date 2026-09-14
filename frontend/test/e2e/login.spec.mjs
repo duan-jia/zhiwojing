@@ -17,6 +17,8 @@ test.afterAll(async () => {
 })
 for (const width of [1280, 390]) {
   test(`guest retry enters world at width ${width}`, async ({ page }, testInfo) => {
+    const errors = []
+    page.on('pageerror', error => errors.push(error.message))
     await page.setViewportSize({ width, height: 800 })
     let attempts = 0
     await page.route('**/api/**', async route => {
@@ -42,6 +44,8 @@ for (const width of [1280, 390]) {
     await page.keyboard.down('ArrowRight')
     await expect.poll(position).not.toEqual(before)
     await page.keyboard.up('ArrowRight')
+    await page.waitForTimeout(2000)
+    expect(errors).toEqual([])
     await page.screenshot({ path: testInfo.outputPath(`guest-${width}.png`) })
   })
 }

@@ -1,4 +1,5 @@
 import os
+import asyncio
 import logging
 import sqlite3
 import json
@@ -10,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from ipaddress import ip_address
 from typing import Literal, Optional
 from urllib.parse import urlencode, urlparse
+from contextlib import suppress
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -21,8 +23,10 @@ from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 from .agent import AgentRuntimeError, AvatarAgentRuntime
 from .memory import MemoryConfig, MemoryService, StructuredStore, build_mem0
-from .memory.store import Contact, Message, Presence
+from .memory.scopes import pair_scope, private_scope
+from .memory.store import AvatarProfile, Contact, Episode, Message, PersonaCard, Presence, Relationship
 from .memory.coldstart import persona_prompt, run_coldstart
+from .guest_cleanup import run_daily, scope_contains_guest, thread_contains_guest
 from .zhihu import CapabilityError, ToolContext, build_tool_registry
 from .zhihu.catalog import BuildingCatalog, build_building_catalog
 from .zhihu.http_provider import HttpZhihuProvider
@@ -45,6 +49,7 @@ from .zhihu.models import (
 engine = create_engine("sqlite:///./avatar.db", connect_args={"check_same_thread": False})
 # Temporary hackathon OAuth grants stay server-side and expire with the token.
 oauth_grants: dict[str, dict[str, object]] = {}
+guest_cleanup_task: asyncio.Task[None] | None = None
 
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -473,6 +478,87 @@ def _build_agent_runtime():
 communication_store = StructuredStore(engine)
 agent_runtime = _build_agent_runtime()
 
+
+def delete_all_guest_data() -> int:
+    """Delete every persisted record owned by or shared with a guest user."""
+    with Session(engine) as session:
+        guest_ids = set(session.exec(select(User.id).where(User.kind == "guest")).all())
+        if not guest_ids:
+            return 0
+
+        sessions = session.exec(select(AuthSession).where(AuthSession.user_id.in_(guest_ids))).all()
+        token_hashes = {row.token_hash for row in sessions}
+        memory_scopes = {private_scope(user_id) for user_id in guest_ids}
+
+        relationships = session.exec(
+            select(Relationship).where(
+                (Relationship.avatar_id.in_(guest_ids)) | (Relationship.partner_id.in_(guest_ids))
+            )
+        ).all()
+        for row in relationships:
+            memory_scopes.add(pair_scope(row.avatar_id, row.partner_id))
+
+        contacts = session.exec(
+            select(Contact).where((Contact.user_id.in_(guest_ids)) | (Contact.contact_id.in_(guest_ids)))
+        ).all()
+        for row in contacts:
+            memory_scopes.add(pair_scope(row.user_id, row.contact_id))
+
+        messages = session.exec(
+            select(Message).where((Message.sender_id.in_(guest_ids)) | (Message.recipient_id.in_(guest_ids)))
+        ).all()
+        for row in messages:
+            memory_scopes.add(pair_scope(row.sender_id, row.recipient_id))
+
+        episodes = [
+            row for row in session.exec(select(Episode)).all()
+            if scope_contains_guest(row.scope, guest_ids)
+        ]
+        memory_scopes.update(row.scope for row in episodes)
+
+        memory_service = getattr(agent_runtime, "memory_service", None)
+        backend = getattr(memory_service, "backend", None)
+        if backend is not None:
+            for scope in memory_scopes:
+                backend.delete_all(user_id=scope)
+
+        checkpointer = getattr(agent_runtime, "checkpointer", None)
+        if checkpointer is not None:
+            thread_ids = {
+                str(item.config["configurable"]["thread_id"])
+                for item in checkpointer.list(None)
+            }
+            for thread_id in thread_ids:
+                if thread_contains_guest(thread_id, guest_ids):
+                    checkpointer.delete_thread(thread_id)
+
+        rows = [
+            *sessions,
+            *relationships,
+            *contacts,
+            *messages,
+            *episodes,
+            *session.exec(select(AvatarProfile).where(AvatarProfile.avatar_id.in_(guest_ids))).all(),
+            *session.exec(select(PersonaCard).where(PersonaCard.avatar_id.in_(guest_ids))).all(),
+            *session.exec(select(Presence).where(Presence.user_id.in_(guest_ids))).all(),
+        ]
+        for row in rows:
+            session.delete(row)
+        for user in session.exec(select(User).where(User.id.in_(guest_ids))).all():
+            session.delete(user)
+        session.commit()
+
+    for token_hash in token_hashes:
+        oauth_grants.pop(token_hash, None)
+
+    owner_turns = getattr(memory_service, "_owner_turns", None)
+    if isinstance(owner_turns, dict):
+        for key in list(owner_turns):
+            if isinstance(key, tuple) and key and key[0] in guest_ids:
+                owner_turns.pop(key, None)
+
+    return len(guest_ids)
+
 MOCK_AVATARS = (
     {"zhihu_id": "mock-user", "name": "体验用户", "bio": "AI 产品经理", "interests": "科技、生活、创造", "style": "清晰、真诚、有条理"},
     {"zhihu_id": "mock-life", "name": "苏晚", "bio": "生活方式作者", "interests": "阅读、旅行、美食", "style": "温柔、细腻、善用比喻"},
@@ -499,8 +585,24 @@ def startup():
             session.commit()
 
 
+@app.on_event("startup")
+async def start_guest_cleanup():
+    global guest_cleanup_task
+    if (
+        os.getenv("GUEST_CLEANUP_ENABLED", "1") == "1"
+        and (guest_cleanup_task is None or guest_cleanup_task.done())
+    ):
+        guest_cleanup_task = asyncio.create_task(run_daily(delete_all_guest_data))
+
+
 @app.on_event("shutdown")
 async def shutdown():
+    global guest_cleanup_task
+    if guest_cleanup_task is not None:
+        guest_cleanup_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await guest_cleanup_task
+        guest_cleanup_task = None
     await tool_registry.close()
 
 @app.get("/api/health")

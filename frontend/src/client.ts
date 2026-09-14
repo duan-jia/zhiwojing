@@ -4,13 +4,14 @@ import { mergeConfig } from "@signe/di";
 import { showLogin } from "./login";
 import "./login.css";
 import { setupContacts } from './contacts'
+import { readAuthToken } from './api'
 
 async function startApp() {
   const identity = await showLogin();
   const contacts = setupContacts(identity.id)
   const configuredHost = import.meta.env.VITE_RPGJS_SERVER_HOST?.trim();
   const host = configuredHost || `${window.location.hostname}:8001`;
-  const token = window.localStorage.getItem('zhiwojing.auth-token') || ''
+  const token = readAuthToken()
 
   try {
     await startGame(

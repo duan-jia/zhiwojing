@@ -1,3 +1,5 @@
+import { apiFetch } from './api'
+
 export type CapabilityStatus = 'ready' | 'unconfigured' | 'auth_required' | 'coming_soon'
 
 export interface BuildingCapability {
@@ -26,7 +28,7 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 let catalogRequest: Promise<BuildingCatalogResponse> | null = null
 
 export function loadBuildingCatalog(): Promise<BuildingCatalogResponse> {
-  catalogRequest ??= fetch(`${API}/api/world/buildings`, {
+  catalogRequest ??= apiFetch(`${API}/api/world/buildings`, {
     credentials: 'include',
     signal: AbortSignal.timeout(10000),
   }).then(async response => {

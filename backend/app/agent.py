@@ -159,7 +159,7 @@ class AvatarAgentRuntime:
         try:
             result = await agent.ainvoke(
                 {"messages": [("user", message)]},
-                config={"configurable": {"thread_id": conversation_id}},
+                config={"configurable": {"thread_id": f"chat:{user_id}:{avatar_id}:{conversation_id}"}},
             )
         except AuthenticationError as error:
             raise AgentRuntimeError(

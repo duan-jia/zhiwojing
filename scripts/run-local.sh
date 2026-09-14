@@ -35,6 +35,7 @@ fi
 export LLM_BASE_URL="${LLM_BASE_URL:-https://api.openai-next.com/v1}"
 export LLM_MODEL="${LLM_MODEL:-deepseek-v4-flash}"
 export AVATAR_API_URL="${AVATAR_API_URL:-http://127.0.0.1:8000}"
+export AUTH_REQUIRED="${AUTH_REQUIRED:-1}"
 
 echo "构建 RPGJS 客户端与世界服务……"
 (cd "${frontend_dir}" && npm run build)

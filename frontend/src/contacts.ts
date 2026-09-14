@@ -1,6 +1,7 @@
 export interface Contact { id: number; name: string; online: boolean; humanControlled: boolean; lastMessage: string | null; unread: number }
 export interface ThreadMessage { id: number; senderId: number; senderKind: 'human' | 'agent'; content: string; createdAt: string }
 import { deliveryNotice, totalUnread } from './contacts-logic.mjs'
+import { apiFetch } from './api'
 export { deliveryNotice, totalUnread } from './contacts-logic.mjs'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -15,7 +16,7 @@ export function setupContacts(userId: number) {
   ;(hud ?? document.body).append(button)
   let contacts: Contact[] = []; let active: Contact | null = null; let timer = 0; let notice = ''
   const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
-    const response = await fetch(`${API}${path}`, { credentials: 'include', ...init })
+    const response = await apiFetch(`${API}${path}`, init)
     if (!response.ok) throw new Error(`服务返回 ${response.status}`)
     return response.json() as Promise<T>
   }
@@ -48,5 +49,5 @@ export function setupContacts(userId: number) {
   button.addEventListener('click', () => { root.hidden = !root.hidden; if (!root.hidden) void refresh().then(render) })
   root.addEventListener('click', event => { if (event.target === root) close() })
   void refresh(); timer = window.setInterval(refresh, 5_000)
-  return { destroy: () => { window.clearInterval(timer); button.remove(); void fetch(`${API}/api/presence`, { method: 'POST', keepalive: true, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ user_id: userId, online: false, human_controlled: false }) }) } }
+  return { destroy: () => { window.clearInterval(timer); button.remove(); void apiFetch(`${API}/api/presence`, { method: 'POST', keepalive: true, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ user_id: userId, online: false, human_controlled: false }) }) } }
 }

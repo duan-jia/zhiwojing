@@ -11,6 +11,7 @@ import {
   type MockIdentity,
   setActiveIdentity,
 } from './identity'
+import { apiFetch, readAuthToken, saveAuthToken } from './api'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -73,12 +74,39 @@ export function showLogin(): Promise<MockIdentity> {
     game.hidden = false
     resolveLogin?.(identity)
   }
+  const completeLogin = (
+    token: string,
+    user: { id?: number; name?: string; profile?: { interests?: string[] } } | null | undefined,
+    fallbackTagline: string,
+  ) => {
+    if (!token || !user?.id) throw new Error('login response incomplete')
+    saveAuthToken(token)
+    enterGame({
+      id: user.id,
+      name: user.name || '知我境用户',
+      tagline: user.profile?.interests?.join('、') || fallbackTagline,
+    })
+  }
+  const restoreStoredSession = async (): Promise<boolean> => {
+    const storedToken = readAuthToken()
+    if (!storedToken) return false
+    try {
+      const response = await apiFetch(`${API}/api/me`, { signal: AbortSignal.timeout(5000) })
+      if (!response.ok) return false
+      const user = await response.json() as OAuthStatus['user']
+      if (entered) return true
+      completeLogin(storedToken, user, user?.name === '游客' ? '知我境体验用户' : '知我境用户')
+      return true
+    } catch {
+      return false
+    }
+  }
   guestButton?.addEventListener('click', async () => {
     if (entered || guestButton.disabled) return
     guestButton.disabled = true
     guestButton.textContent = '正在进入知我境…'
     try {
-      const response = await fetch(`${API}/api/auth/guest`, {
+      const response = await apiFetch(`${API}/api/auth/guest`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
@@ -86,11 +114,7 @@ export function showLogin(): Promise<MockIdentity> {
       })
       if (!response.ok) throw new Error('guest login failed')
       const result = await response.json() as { token?: string; user?: { id?: number; name?: string } }
-      if (result.token) window.localStorage.setItem('zhiwojing.auth-token', result.token)
-      const identity: MockIdentity = result.user?.id
-        ? { id: result.user.id, name: result.user.name || '游客', tagline: '知我境体验用户' }
-        : selectedIdentity
-      enterGame(identity)
+      completeLogin(result.token || '', result.user, '知我境体验用户')
     } catch {
       guestButton.disabled = false
       guestButton.innerHTML = '<span>▶</span> 游客体验'
@@ -136,19 +160,17 @@ export function showLogin(): Promise<MockIdentity> {
           method: 'POST', credentials: 'include', signal: AbortSignal.timeout(5000),
         })
         if (!sessionResponse.ok) throw new Error('OAuth session unavailable')
-        const session = await sessionResponse.json() as { token: string }
+        const session = await sessionResponse.json() as { token: string; user?: OAuthStatus['user'] }
         if (!session.token) throw new Error('OAuth session missing token')
         if (entered) return
-        window.localStorage.setItem('zhiwojing.auth-token', session.token)
-        const user = oauth.user
-        const identity: MockIdentity = user
-          ? { id: user.id, name: user.name, tagline: user.profile?.interests?.join('、') || '知乎用户' }
-          : selectedIdentity
-        enterGame(identity)
+        completeLogin(session.token, session.user || oauth.user, '知乎用户')
+        return
       }
+      await restoreStoredSession()
     })
-    .catch(() => {
+    .catch(async () => {
       if (entered) return
+      if (await restoreStoredSession()) return
       if (oauthLabel) oauthLabel.textContent = '知乎登录暂不可用'
       if (oauthDetail) oauthDetail.textContent = '认证服务暂时不可用'
       if (status) status.textContent = '暂时无法读取知乎认证状态，请稍后刷新。'

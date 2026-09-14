@@ -4,6 +4,7 @@ import {
   getActiveIdentity,
   identityForId,
 } from './identity'
+import { apiFetch } from './api'
 
 interface AgentChatResponse {
   conversation_id: string
@@ -101,7 +102,7 @@ async function sendMessage(message: string): Promise<void> {
   renderPending()
 
   try {
-    const response = await fetch(`${API}/api/agent/chat`, {
+    const response = await apiFetch(`${API}/api/agent/chat`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
