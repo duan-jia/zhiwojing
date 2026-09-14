@@ -44,11 +44,16 @@ class HttpZhihuProvider:
         *,
         transport: httpx.AsyncBaseTransport | None = None,
         access_secret: str | None = None,
+        oauth_token: str | None = None,
     ):
         self.transport = transport
         self.access_secret = access_secret
+        self.oauth_token = oauth_token
 
     def _headers(self) -> dict[str, str]:
+        if self.oauth_token:
+            return {"Authorization": f"Bearer {self.oauth_token}", "X-OAuth-Token": self.oauth_token,
+                    "X-Request-Timestamp": str(int(time.time())), "Content-Type": "application/json"}
         access_secret = self.access_secret
         if access_secret is None:
             access_secret = os.getenv("ZHIHU_ACCESS_SECRET", "").strip()
@@ -102,6 +107,8 @@ class HttpZhihuProvider:
                 retryable=True,
             ) from error
 
+        if response.status_code in (401, 403) and self.oauth_token:
+            raise ZhihuAPIError(401, "OAUTH_TOKEN_EXPIRED", "知乎授权已过期，请重新授权。")
         if response.status_code in (401, 403):
             raise ZhihuAPIError(503, "ZHIHU_AUTH_INVALID", "知乎开放平台凭证无效，请重新配置。")
         if response.status_code == 429:
