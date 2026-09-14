@@ -141,3 +141,7 @@ App ID、OAuth App Key 和 Access Secret 是三种不同凭证，不能互相替
 前端：在 `frontend/` 运行 `npm run build` 同时生成 `dist/client` 浏览器产物及 `dist/server` RPGJS Node 世界服务；`npm run server` 启动世界权威。`npm test` 覆盖地图、登录、身份同步、附近目标选择、对话接线和生产预览；Canvas 点击仍需在浏览器中人工走查。
 
 后端：安装依赖后，在 `backend/` 运行 `python -m unittest discover -s tests -v`。测试使用临时 SQLite 数据库，覆盖输入校验、语气和结构、用户初始化及接口错误。
+
+### 知乎 OAuth 部署
+
+知乎授权码登录所需环境变量、回调登记、前端 ticket 交换契约与身份降级限制见 [docs/ZHIHU_OAUTH.md](docs/ZHIHU_OAUTH.md)。生产回调必须是已登记、以 `/auth/callback` 结尾的公网 HTTPS URL；应用密钥不得进入前端。
