@@ -141,7 +141,7 @@ test('authorized OAuth return reveals the game', async () => {
   assert.equal(harness.elements['#rpg'].hidden, false)
 })
 
-test('stored guest session resumes through the authenticated me endpoint', async () => {
+test('stored guest session waits for a click before resuming through the authenticated me endpoint', async () => {
   const requests = []
   const harness = await loginHarness(async (url, init = {}) => {
     requests.push({ url, init })
@@ -149,6 +149,11 @@ test('stored guest session resumes through the authenticated me endpoint', async
     if (url.endsWith('/me')) return { ok: true, json: async () => ({ id: 4, name: '游客' }) }
     throw new Error(`unexpected request: ${url}`)
   }, [['zhiwojing.auth-token', 'stored-guest-token']])
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(harness.elements['#login-root'].hidden, false)
+  assert.equal(harness.elements['#rpg'].hidden, true)
+  assert.equal(requests.some(request => request.url.endsWith('/me')), false)
+  await harness.elements['.enter-game-button'].click()
   assert.equal((await harness.result).id, 4)
   assert.equal(harness.elements['#login-root'].hidden, true)
   assert.equal(harness.elements['#rpg'].hidden, false)

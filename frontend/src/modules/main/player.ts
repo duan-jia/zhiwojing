@@ -51,8 +51,12 @@ export const player: RpgPlayerHooks = {
     onJoinMap(player: RpgPlayer) {
         const synchronizedPlayer = player as RpgPlayer & {
             agentMode: (() => boolean) & { set(value: boolean): void }
+            authToken?: string
         }
-        if (synchronizedPlayer.agentMode()) enableAgent(player as any)
+        // The initial map join happens before onAccepted provides the
+        // connection context. Wait for the application token before starting
+        // autonomy because it reports presence immediately.
+        if (synchronizedPlayer.agentMode() && synchronizedPlayer.authToken) enableAgent(player as any)
     },
     onInput(player: RpgPlayer, data: any) {
         const action = String(data?.action ?? data?.input ?? '')
@@ -76,11 +80,15 @@ export const player: RpgPlayerHooks = {
         const avatarId = avatarIdFromContext(context)
         const profile = profiles[avatarId as keyof typeof profiles] || profiles[1]
         const shortId = String(player.id).slice(-4).toUpperCase()
-        const synchronizedPlayer = player as RpgPlayer & { avatarId: AvatarIdSignal }
+        const synchronizedPlayer = player as RpgPlayer & {
+            avatarId: AvatarIdSignal
+            agentMode: (() => boolean) & { set(value: boolean): void }
+        }
         synchronizedPlayer.avatarId.set(avatarId)
         ;(player as any).authToken = String(context.query.token || '')
         player.name = `${profile.name} · ${shortId}`
         player.setGraphic(profile.graphic)
         presence(avatarId, String(context.query.token || ''), true, false)
+        if (synchronizedPlayer.agentMode()) enableAgent(player as any)
     },
 }

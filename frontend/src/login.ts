@@ -106,6 +106,7 @@ export function showLogin(): Promise<MockIdentity> {
     guestButton.disabled = true
     guestButton.textContent = '正在进入知我境…'
     try {
+      if (await restoreStoredSession()) return
       const response = await apiFetch(`${API}/api/auth/guest`, {
         method: 'POST',
         credentials: 'include',
@@ -166,11 +167,9 @@ export function showLogin(): Promise<MockIdentity> {
         completeLogin(session.token, session.user || oauth.user, '知乎用户')
         return
       }
-      await restoreStoredSession()
     })
-    .catch(async () => {
+    .catch(() => {
       if (entered) return
-      if (await restoreStoredSession()) return
       if (oauthLabel) oauthLabel.textContent = '知乎登录暂不可用'
       if (oauthDetail) oauthDetail.textContent = '认证服务暂时不可用'
       if (status) status.textContent = '暂时无法读取知乎认证状态，请稍后刷新。'
