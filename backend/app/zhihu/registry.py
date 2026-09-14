@@ -22,6 +22,7 @@ from .models import (
 from .provider import QuestionRecommendationsProvider, UserProvider, ZhihuProvider
 
 ProfileResolver = Callable[[int], DraftProfile]
+OAuthTokenResolver = Callable[[int], str | None]
 ToolHandler = Callable[[BaseModel, "ToolContext"], Awaitable[BaseModel]]
 
 
@@ -57,12 +58,14 @@ class ToolRegistry:
         draft_provider: DraftProvider,
         user_provider: UserProvider,
         profile_resolver: ProfileResolver | None = None,
+        oauth_token_resolver: OAuthTokenResolver | None = None,
     ):
         self.public_provider = public_provider
         self.recommendations_provider = recommendations_provider
         self.draft_provider = draft_provider
         self.user_provider = user_provider
         self.profile_resolver = profile_resolver
+        self.oauth_token_resolver = oauth_token_resolver
         self._tools = {
             "question_recommendations": ToolDefinition(
                 "question_recommendations",
@@ -108,23 +111,23 @@ class ToolRegistry:
             ),
             "user_contents": ToolDefinition(
                 "user_contents", "查看当前用户最近发布的知乎内容。", UserContentsInput,
-                "user_context/personal", lambda payload, context: user_provider.user_contents(payload.content_type, payload.limit),
+                "user_context/personal", lambda payload, context: self._personal(context, "user_contents", payload.content_type, payload.limit),
             ),
             "user_followees": ToolDefinition(
                 "user_followees", "查看当前用户在知乎关注了谁。", UserFolloweesInput,
-                "user_context/personal", lambda payload, context: user_provider.user_followees(payload.limit),
+                "user_context/personal", lambda payload, context: self._personal(context, "user_followees", payload.limit),
             ),
             "user_collections": ToolDefinition(
                 "user_collections", "查看当前用户收藏的知乎内容。", UserCollectionsInput,
-                "user_context/personal", lambda payload, context: user_provider.user_collections(payload.limit),
+                "user_context/personal", lambda payload, context: self._personal(context, "user_collections", payload.limit),
             ),
             "user_favlists": ToolDefinition(
                 "user_favlists", "查看当前用户创建或关注的知乎收藏夹。", UserFavlistsInput,
-                "user_context/personal", lambda payload, context: user_provider.user_favlists(payload.limit),
+                "user_context/personal", lambda payload, context: self._personal(context, "user_favlists", payload.limit),
             ),
             "creator_account_stats": ToolDefinition(
                 "creator_account_stats", "查看当前用户的知乎创作数据和账号统计。", CreatorAccountStatsInput,
-                "user_context/personal", lambda payload, context: user_provider.creator_account_stats(),
+                "user_context/personal", lambda payload, context: self._personal(context, "creator_account_stats"),
             ),
         }
 
@@ -160,6 +163,15 @@ class ToolRegistry:
         profile = self.profile_resolver(context.user_id)
         return await self.draft_provider.generate(payload, profile)
 
+    async def _personal(self, context: ToolContext, method: str, *args: object) -> BaseModel:
+        provider = self.user_provider
+        token = context.oauth_token
+        if token is None and context.user_id is not None and self.oauth_token_resolver is not None:
+            token = self.oauth_token_resolver(context.user_id)
+        if token and isinstance(provider, HttpZhihuProvider):
+            provider = HttpZhihuProvider(transport=provider.transport, oauth_token=token)
+        return await getattr(provider, method)(*args)
+
     async def execute(
         self,
         name: str,
@@ -188,6 +200,7 @@ def build_tool_registry(
     provider_name: str | None = None,
     *,
     profile_resolver: ProfileResolver | None = None,
+    oauth_token_resolver: OAuthTokenResolver | None = None,
     draft_provider: DraftProvider | None = None,
     user_provider: UserProvider | None = None,
 ) -> ToolRegistry:
@@ -205,4 +218,5 @@ def build_tool_registry(
         draft_provider=draft_provider or LocalTemplateDraftProvider(),
         user_provider=user_provider or http_provider,
         profile_resolver=profile_resolver,
+        oauth_token_resolver=oauth_token_resolver,
     )
