@@ -10,7 +10,7 @@ import httpx
 from sqlmodel import Session, create_engine, select
 
 from app import main
-from app.memory.store import Contact, Message, PersonaCard
+from app.memory.store import Contact, Message, PersonaCard, PresenceLease
 
 
 class AuthTests(unittest.IsolatedAsyncioTestCase):
@@ -90,8 +90,8 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
         presence = await self.client.post("/api/presence", headers=headers, json={"user_id": b, "online": True, "human_controlled": True})
         self.assertEqual(presence.status_code, 200)
         with Session(main.engine) as session:
-            self.assertIsNone(session.get(main.Presence, b))
-            self.assertTrue(session.get(main.Presence, a).online)
+            self.assertIsNone(session.get(PresenceLease, f"{b}:legacy"))
+            self.assertTrue(session.get(PresenceLease, f"{a}:legacy").human_controlled)
 
     async def test_oauth_profile_failure_does_not_block_login_or_user_apis(self):
         from unittest.mock import AsyncMock

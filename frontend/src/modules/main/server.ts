@@ -2,9 +2,15 @@ import { defineModule } from "@rpgjs/common";
 import { Move, RpgServer } from "@rpgjs/server";
 import { player } from './player.ts'
 import { TOWN_BUILDINGS } from '../../town-layout.mjs'
+import { pensordWeapon } from './weapons.ts'
 
 export default defineModule<RpgServer>({
   player,
+  // Session transfers serialize inventory entries by ID. Register starter
+  // equipment in every room database so the destination map can hydrate it.
+  database: {
+    pensord: pensordWeapon,
+  },
   map: {
     onLoad(map) {
       // This MVP keeps avatars only while their browser session is online.

@@ -1,13 +1,14 @@
 import os
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import httpx
 from sqlmodel import Session, create_engine, select
 from app import main
-from app.memory.store import Contact, Message
+from app.memory.store import Contact, Message, PresenceLease
 from app.memory import MemoryConfig
 
 
@@ -56,8 +57,17 @@ class CommunicationTests(unittest.IsolatedAsyncioTestCase):
         await self.client.post('/api/presence', json={"user_id": 3, "online": True, "human_controlled": True})
         self.assertEqual((await self.send(recipient=3)).json()['delivered'], 'human')
 
-    async def test_offline_agent_reply_cap_read_and_human_reset(self):
+    async def test_offline_message_waits_without_agent_reply(self):
+        runtime = AsyncMock(); runtime.chat.return_value = '不应调用'
+        with patch.object(main, 'agent_runtime', runtime):
+            result = await self.send()
+        self.assertEqual(result.json()['delivered'], 'offline')
+        runtime.chat.assert_not_called()
+        self.assertEqual((await self.client.get('/api/messages/inbox?user_id=2')).json()['unread'], 1)
+
+    async def test_online_delegated_agent_reply_cap_read_and_human_reset(self):
         runtime = AsyncMock(); runtime.chat.return_value = '你好呀'
+        await self.client.post('/api/presence', json={"user_id": 2, "online": True, "human_controlled": False})
         with patch.object(main, 'agent_runtime', runtime), patch.dict(os.environ, {"REMOTE_AGENT_REPLY_LIMIT": "1"}):
             first = await self.send(); capped = await self.send(content='还在吗')
         self.assertEqual(first.json()['delivered'], 'agent'); self.assertTrue(capped.json()['capped'])
@@ -69,3 +79,17 @@ class CommunicationTests(unittest.IsolatedAsyncioTestCase):
         with Session(main.engine) as session:
             row = session.exec(select(Contact).where(Contact.user_id == 1, Contact.contact_id == 2)).first()
             self.assertEqual(row.agent_reply_streak, 0)
+
+    async def test_presence_uses_live_connection_leases(self):
+        await self.client.post('/api/presence', json={"user_id": 2, "connection_id": "tab-a", "online": True, "human_controlled": False})
+        await self.client.post('/api/presence', json={"user_id": 2, "connection_id": "tab-b", "online": True, "human_controlled": True})
+        contact = (await self.client.get('/api/contacts?user_id=1')).json()['contacts'][0]
+        self.assertTrue(contact['online']); self.assertTrue(contact['humanControlled'])
+        await self.client.post('/api/presence', json={"user_id": 2, "connection_id": "tab-b", "online": False, "human_controlled": False})
+        contact = (await self.client.get('/api/contacts?user_id=1')).json()['contacts'][0]
+        self.assertTrue(contact['online']); self.assertFalse(contact['humanControlled'])
+        with Session(main.engine) as session:
+            lease = session.get(PresenceLease, '2:tab-a')
+            lease.updated_at = datetime.now(timezone.utc) - timedelta(minutes=2)
+            session.add(lease); session.commit()
+        self.assertFalse((await self.client.get('/api/contacts?user_id=1')).json()['contacts'][0]['online'])

@@ -15,6 +15,7 @@ async function loadTypeScriptModule(relativePath) {
       .replace(/import \{ disposeAgent, enableAgent, takeControl, toggleAgent \} from '.\/autonomy\.ts'/, 'const disposeAgent=()=>{}; const enableAgent=()=>{}; const takeControl=()=>{}; const toggleAgent=()=>{}')
       .replace(/import \{ handleAutonomyInput \} from '.\/player-input\.ts'/, 'const handleAutonomyInput=()=>{}')
       .replace(/import \{ clearRespawnTimer, initializeCombatPlayer, revivePlayer \} from '.\/combat'/, 'const clearRespawnTimer=()=>{}; const initializeCombatPlayer=()=>{}; const revivePlayer=()=>{}')
+      .replace(/import \{ initializeStarterWeapon \} from '.\/weapons'/, 'const initializeStarterWeapon=()=>{}')
   }
   const result = await transformWithOxc(source, path)
   const url = `data:text/javascript;base64,${Buffer.from(result.code).toString('base64')}`
@@ -47,7 +48,9 @@ test('RPGJS connection query becomes synchronized mock identity metadata', async
       set: value => { mockPlayer.avatarIdValue = value }
     }),
     avatarIdValue: 0,
+    agentMode: () => false,
     setGraphic: graphic => graphics.push(graphic),
+    stopMoveTo: () => undefined,
     changeMap: async () => undefined
   }
 
@@ -59,6 +62,7 @@ test('RPGJS connection query becomes synchronized mock identity metadata', async
   player.onAccepted(mockPlayer, { query: { avatar_id: 'not-valid' } })
   assert.equal(mockPlayer.avatarId(), 1)
   assert.match(mockPlayer.name, /^体验用户 · /)
+  player.onDisconnected(mockPlayer)
 })
 
 test('Escape input opens the RPGJS main menu', async () => {

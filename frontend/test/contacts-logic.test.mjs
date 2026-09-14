@@ -9,15 +9,17 @@ test('contact logic totals unread across contacts', () => {
   assert.equal(totalUnread([]), 0)
 })
 
-test('contact logic explains only capped delivery', () => {
+test('contact logic explains capped and offline delivery', () => {
   assert.match(deliveryNotice({ delivered: 'capped' }), /连续回复已达上限/)
   assert.match(deliveryNotice({ delivered: 'agent', capped: true }), /连续回复已达上限/)
   assert.equal(deliveryNotice({ delivered: 'agent', capped: false }), '')
   assert.equal(deliveryNotice({ delivered: 'human' }), '')
+  assert.match(deliveryNotice({ delivered: 'offline' }), /下次上线后看到/)
 })
 
 test('contacts UI retains polling and mutual-delete behavior', () => {
   assert.match(source, /setInterval\(refresh, 5_000\)/)
   assert.doesNotMatch(source, /重新添加|\/restore|status: 'active' \| 'removed'/)
   assert.match(source, /active = null; await refresh\(\)/)
+  assert.doesNotMatch(source, /online: false/)
 })

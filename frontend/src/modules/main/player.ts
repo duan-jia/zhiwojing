@@ -14,10 +14,34 @@ const profiles = {
     3: { name: '周博', graphic: 'hero' },
 } as const
 const API_URL = (typeof process !== 'undefined' && process.env.AVATAR_API_URL) || 'http://127.0.0.1:8000'
+const PRESENCE_HEARTBEAT_MS = 15_000
+const presenceTimers = new Map<string, ReturnType<typeof setInterval>>()
 
-function presence(userId: number, token: string, online: boolean, humanControlled: boolean) {
-    void fetch(`${API_URL}/api/presence`, { method: 'POST', headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ user_id: userId, online, human_controlled: humanControlled }) })
+function connectionId(player: RpgPlayer): string {
+    const id = (player as any).id
+    return String(typeof id === 'function' ? id() : id)
+}
+
+function presence(player: RpgPlayer, online: boolean) {
+    const synchronizedPlayer = player as RpgPlayer & { avatarId: AvatarIdSignal; agentMode: (() => boolean); authToken?: string }
+    void fetch(`${API_URL}/api/presence`, { method: 'POST', headers: { 'content-type': 'application/json', ...(synchronizedPlayer.authToken ? { authorization: `Bearer ${synchronizedPlayer.authToken}` } : {}) }, body: JSON.stringify({ user_id: synchronizedPlayer.avatarId(), connection_id: connectionId(player), online, human_controlled: online && !synchronizedPlayer.agentMode() }) })
         .catch(error => console.warn('presence update failed', error))
+}
+
+function startPresenceHeartbeat(player: RpgPlayer) {
+    const id = connectionId(player)
+    const previous = presenceTimers.get(id)
+    if (previous) clearInterval(previous)
+    presence(player, true)
+    presenceTimers.set(id, setInterval(() => presence(player, true), PRESENCE_HEARTBEAT_MS))
+}
+
+function stopPresenceHeartbeat(player: RpgPlayer) {
+    const id = connectionId(player)
+    const timer = presenceTimers.get(id)
+    if (timer) clearInterval(timer)
+    presenceTimers.delete(id)
+    presence(player, false)
 }
 
 type AvatarIdSignal = (() => number) & { set(value: number): void }
@@ -45,8 +69,8 @@ export const player: RpgPlayerHooks = {
         const actionPlayer = player as RpgPlayer & { on(event: string, callback: () => void): void }
         actionPlayer.on('revive', () => revivePlayer(player))
         initializeCombatPlayer(player)
-        await player.changeMap('nature-open-world', 'start')
         initializeStarterWeapon(player)
+        await player.changeMap('nature-open-world', 'start')
     },
     onJoinMap(player: RpgPlayer) {
         const synchronizedPlayer = player as RpgPlayer & {
@@ -73,8 +97,7 @@ export const player: RpgPlayerHooks = {
     onDisconnected(player: RpgPlayer) {
         disposeAgent(player as any)
         clearRespawnTimer(player)
-        const synchronizedPlayer = player as RpgPlayer & { avatarId: AvatarIdSignal }
-        presence(synchronizedPlayer.avatarId(), String((player as any).authToken || ''), false, false)
+        stopPresenceHeartbeat(player)
     },
     onAccepted(player: RpgPlayer, context: RpgPlayerConnectionContext) {
         const avatarId = avatarIdFromContext(context)
@@ -88,7 +111,11 @@ export const player: RpgPlayerHooks = {
         ;(player as any).authToken = String(context.query.token || '')
         player.name = `${profile.name} · ${shortId}`
         player.setGraphic(profile.graphic)
-        presence(avatarId, String(context.query.token || ''), true, false)
-        if (synchronizedPlayer.agentMode()) enableAgent(player as any)
+        startPresenceHeartbeat(player)
+        // onAccepted also runs for the lobby connection. Only gameplay maps
+        // expose a movement manager; a failed room transfer must not start
+        // autonomous movement against the lobby's incomplete physics API.
+        const map = (player as any).getCurrentMap?.()
+        if (synchronizedPlayer.agentMode() && map?.moveManager) enableAgent(player as any)
     },
 }

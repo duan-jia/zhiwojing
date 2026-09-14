@@ -16,6 +16,7 @@ from app.memory.store import (
     Message,
     PersonaCard,
     Presence,
+    PresenceLease,
     Relationship,
 )
 
@@ -85,6 +86,7 @@ class GuestCleanupTests(unittest.TestCase):
             session.add(Contact(user_id=1, contact_id=guest_id))
             session.add(Message(pair_key=f"1:{guest_id}", sender_id=guest_id, recipient_id=1, content="guest message"))
             session.add(Presence(user_id=guest_id, online=True))
+            session.add(PresenceLease(lease_id=f"{guest_id}:test", user_id=guest_id))
             session.add(Episode(scope=f"avatar:{guest_id}", kind="owner", summary="guest", conversation_id=f"{guest_id}:{guest_id}", idempotency_key="guest-private"))
             session.add(Episode(scope=f"pair:1-{guest_id}", kind="meeting", summary="shared", conversation_id=f"1:{guest_id}", idempotency_key="guest-pair"))
             session.add(Episode(scope="avatar:1", kind="owner", summary="keep", conversation_id="1:1", idempotency_key="keep-private"))
@@ -114,6 +116,7 @@ class GuestCleanupTests(unittest.TestCase):
             self.assertEqual(session.exec(select(Message).where((Message.sender_id == guest_id) | (Message.recipient_id == guest_id))).all(), [])
             self.assertIsNone(session.get(PersonaCard, guest_id))
             self.assertIsNone(session.get(Presence, guest_id))
+            self.assertIsNone(session.get(PresenceLease, f"{guest_id}:test"))
             self.assertIsNotNone(session.get(AvatarProfile, 1))
             self.assertIsNotNone(session.exec(select(Episode).where(Episode.scope == "avatar:1")).first())
 

@@ -28,7 +28,7 @@ The frontend authentication flow now:
 
 - calls `POST /api/auth/guest` (or dev-login locally), persists the returned token, and derives the visible user from the returned `user`/`GET /api/me` rather than a local identity picker;
 - restores both guest and OAuth application sessions through `/api/me` after a reload;
-- adds `Authorization: Bearer <token>` through the shared browser API helper for contacts, messages, persona, coldstart, Zhihu, draft, agent chat, and presence calls;
+- adds `Authorization: Bearer <token>` through the shared browser API helper for contacts, messages, persona, coldstart, Zhihu, draft, and agent chat calls; RPGJS forwards the same token for connection-scoped presence leases;
 - connects to RPGJS with `?token=<token>` (the current client reads `zhiwojing.auth-token`); and
 - clears the token after logout or an `INVALID_TOKEN` response.
 

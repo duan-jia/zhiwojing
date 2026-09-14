@@ -75,7 +75,7 @@ function defeated(player: AgentPlayer) {
 function reportPresence(player: AgentPlayer, humanControlled: boolean) {
   const controller = new AbortController()
   void post(player, '/api/presence', {
-    user_id: value(player.avatarId), online: true, human_controlled: humanControlled,
+    user_id: value(player.avatarId), connection_id: playerId(player), online: true, human_controlled: humanControlled,
   }, controller.signal).catch(error => console.warn('presence update failed', error))
 }
 

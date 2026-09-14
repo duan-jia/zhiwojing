@@ -4,6 +4,7 @@ import test from 'node:test'
 import { handleAutonomyInput } from '../src/modules/main/player-input.ts'
 const autonomy = await readFile(new URL('../src/modules/main/autonomy.ts', import.meta.url), 'utf8')
 const playerHooks = await readFile(new URL('../src/modules/main/player.ts', import.meta.url), 'utf8')
+const serverModule = await readFile(new URL('../src/modules/main/server.ts', import.meta.url), 'utf8')
 test('autonomy is transition-driven and defines nearby locations', () => {
   for (const name of ['中央广场', '知我居门前', '知乎热榜门前', '藏书阁门前', '问道馆门前', '创作坊门前', '天工坊门前']) assert.match(autonomy, new RegExp(name))
   assert.match(autonomy, /startNextLeg/)
@@ -74,6 +75,15 @@ test('agent movement starts only after the player joins a gameplay map', () => {
   assert.match(joinMapHook, /enableAgent\(player/)
   assert.match(playerHooks, /onLeaveMap\(player:/)
   assert.match(playerHooks, /onDisconnected\(player:/)
+  assert.match(playerHooks, /PRESENCE_HEARTBEAT_MS = 15_000/)
+  assert.match(playerHooks, /connection_id: connectionId\(player\)/)
+  assert.match(playerHooks, /map\?\.moveManager/)
+})
+
+test('starter weapon is registered for cross-room session restoration', () => {
+  assert.match(serverModule, /import \{ pensordWeapon \} from '\.\/weapons\.ts'/)
+  assert.match(serverModule, /database:\s*\{\s*pensord: pensordWeapon/)
+  assert.ok(playerHooks.indexOf('initializeStarterWeapon(player)') < playerHooks.indexOf("changeMap('nature-open-world', 'start')"))
 })
 
 test('native arrival schedules a new destination without forcing a stop', async t => {

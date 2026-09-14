@@ -68,6 +68,13 @@ class Presence(SQLModel, table=True):
     human_controlled: bool = False
     updated_at: datetime = Field(default_factory=utcnow)
 
+class PresenceLease(SQLModel, table=True):
+    __tablename__ = "presence_leases"
+    lease_id: str = Field(primary_key=True)
+    user_id: int = Field(index=True)
+    human_controlled: bool = False
+    updated_at: datetime = Field(default_factory=utcnow, index=True)
+
 class StructuredStore:
     def __init__(self, engine): self.engine = engine
     def recent_partners(self, avatar_id: int, limit: int = 5) -> list[int]:
@@ -114,4 +121,3 @@ class StructuredStore:
             row.sources_json = json.dumps(sources, ensure_ascii=False)
             row.generated_at = utcnow()
             s.commit()
-

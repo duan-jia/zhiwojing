@@ -24,7 +24,7 @@ from sqlmodel import Field, Session, SQLModel, create_engine, select
 from .agent import AgentRuntimeError, AvatarAgentRuntime
 from .memory import MemoryConfig, MemoryService, StructuredStore, build_mem0
 from .memory.scopes import pair_scope, private_scope
-from .memory.store import AvatarProfile, Contact, Episode, Message, PersonaCard, Presence, Relationship
+from .memory.store import AvatarProfile, Contact, Episode, Message, PersonaCard, Presence, PresenceLease, Relationship
 from .memory.coldstart import persona_prompt, run_coldstart
 from .guest_cleanup import run_daily, scope_contains_guest, thread_contains_guest
 from .zhihu import CapabilityError, ToolContext, build_tool_registry
@@ -149,6 +149,7 @@ class PresenceRequest(BaseModel):
     user_id: int
     online: bool
     human_controlled: bool
+    connection_id: str = Field(default="legacy", min_length=1, max_length=200)
 
 class MessageSendRequest(BaseModel):
     sender_id: int
@@ -541,6 +542,7 @@ def delete_all_guest_data() -> int:
             *session.exec(select(AvatarProfile).where(AvatarProfile.avatar_id.in_(guest_ids))).all(),
             *session.exec(select(PersonaCard).where(PersonaCard.avatar_id.in_(guest_ids))).all(),
             *session.exec(select(Presence).where(Presence.user_id.in_(guest_ids))).all(),
+            *session.exec(select(PresenceLease).where(PresenceLease.user_id.in_(guest_ids))).all(),
         ]
         for row in rows:
             session.delete(row)
@@ -780,18 +782,39 @@ def _reply_limit() -> int:
         return 5
 
 
+def _presence_ttl() -> timedelta:
+    try:
+        return timedelta(seconds=max(5, int(os.getenv("PRESENCE_TTL_SECONDS", "45"))))
+    except ValueError:
+        return timedelta(seconds=45)
+
+
+def _presence_state(session: Session, user_id: int) -> tuple[bool, bool]:
+    cutoff = datetime.now(timezone.utc) - _presence_ttl()
+    leases = session.exec(select(PresenceLease).where(
+        PresenceLease.user_id == user_id,
+        PresenceLease.updated_at >= cutoff,
+    )).all()
+    return bool(leases), any(lease.human_controlled for lease in leases)
+
+
 @app.post("/api/presence")
 async def update_presence(payload: PresenceRequest, request: Request):
     user_id = _request_user_id(request, payload.user_id)
+    lease_id = f"{user_id}:{payload.connection_id}"
     with Session(engine) as session:
         if not session.get(User, user_id):
             raise HTTPException(404, "用户不存在")
-        row = session.get(Presence, user_id)
+        row = session.get(PresenceLease, lease_id)
+        if not payload.online:
+            if row is not None:
+                session.delete(row)
+            session.commit()
+            return {"ok": True}
         if row is None:
-            row = Presence(user_id=user_id)
+            row = PresenceLease(lease_id=lease_id, user_id=user_id)
             session.add(row)
-        row.online = payload.online
-        row.human_controlled = payload.human_controlled if payload.online else False
+        row.human_controlled = payload.human_controlled
         row.updated_at = datetime.now(timezone.utc)
         session.commit()
     return {"ok": True}
@@ -805,13 +828,13 @@ async def list_contacts(request: Request, user_id: int = 1):
         result = []
         for contact in contacts:
             user = session.get(User, contact.contact_id)
-            presence = session.get(Presence, contact.contact_id)
+            online, human_controlled = _presence_state(session, contact.contact_id)
             messages = session.exec(select(Message).where(Message.pair_key == _pair_key(user_id, contact.contact_id)).order_by(Message.created_at.desc()).limit(1)).all()
             unread = len(session.exec(select(Message).where(Message.recipient_id == user_id, Message.sender_id == contact.contact_id, Message.read_at == None)).all())  # noqa: E711
             result.append({
                 "id": contact.contact_id, "name": user.name if user else f"用户 {contact.contact_id}",
-                "online": bool(presence and presence.online),
-                "humanControlled": bool(presence and presence.online and presence.human_controlled),
+                "online": online,
+                "humanControlled": human_controlled,
                 "lastMessage": messages[0].content if messages else None, "unread": unread,
                 "agentReplyStreak": contact.agent_reply_streak,
             })
@@ -871,9 +894,10 @@ async def send_message(payload: MessageSendRequest, request: Request):
         if payload.sender_kind == "human":
             reverse = session.exec(select(Contact).where(Contact.user_id == payload.recipient_id, Contact.contact_id == sender_id)).first()
             if reverse: reverse.agent_reply_streak = 0
-        presence = session.get(Presence, payload.recipient_id)
-        delivered_human = bool(presence and presence.online and presence.human_controlled)
+        recipient_online, delivered_human = _presence_state(session, payload.recipient_id)
         session.commit()
+    if not recipient_online:
+        return {"delivered": "offline", "reply": None, "capped": False}
     if delivered_human:
         return {"delivered": "human", "reply": None, "capped": False}
 
