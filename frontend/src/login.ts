@@ -12,6 +12,7 @@ import {
 } from './identity'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+export const AUTH_TOKEN_STORAGE_KEY = 'zhiwojing.auth-token'
 
 export function showLogin(): Promise<MockIdentity> {
   const root = document.querySelector<HTMLElement>('#login-root')
@@ -41,8 +42,9 @@ export function showLogin(): Promise<MockIdentity> {
               <span class="oauth-icon">知</span>
               <span><strong>正在读取登录状态…</strong><small>知乎 OAuth</small></span>
             </button>
+            <button type="button" class="enter-game-button"><span>▶</span> 以游客身份进入</button>
           </div>
-          <p class="login-status" role="status">请使用知乎账号完成认证后进入。</p>
+          <p class="login-status" role="status">使用知乎账号登录，或先以游客身份逛逛。</p>
         </div>
         <div class="login-character" aria-label="像素旅人">
           <div class="login-speech">准备好了吗？</div>
@@ -100,6 +102,25 @@ export function showLogin(): Promise<MockIdentity> {
       if (oauthButton.disabled) return
       window.location.assign(`${API}/api/oauth/start`)
     }, { once: true })
+    const guestButton = root.querySelector<HTMLButtonElement>('.enter-game-button')
+    guestButton?.addEventListener('click', async () => {
+      if (guestButton.disabled) return
+      guestButton.disabled = true
+      try {
+        const response = await fetch(`${API}/api/auth/guest`, { method: 'POST' })
+        if (!response.ok) throw new Error('guest login failed')
+        const session = await response.json() as { token: string; user: { id: number; name: string } }
+        localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, session.token)
+        const identity: MockIdentity = { id: session.user.id, name: session.user.name, tagline: '游客' }
+        setActiveIdentity(identity)
+        root.hidden = true
+        game.hidden = false
+        resolve(identity)
+      } catch {
+        guestButton.disabled = false
+        if (status) status.textContent = '游客登录暂时不可用，请稍后重试。'
+      }
+    })
     // The OAuth callback reloads the page and will eventually provide the
     // authenticated identity. Keep this promise pending until then.
     void resolve
