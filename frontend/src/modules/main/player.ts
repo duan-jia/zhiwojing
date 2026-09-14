@@ -66,8 +66,6 @@ export const player: RpgPlayerHooks = {
     async onConnected(player: RpgPlayer) {
         player.name = '体验用户'
         player.setGraphic('liukanshan')
-        const actionPlayer = player as RpgPlayer & { on(event: string, callback: () => void): void }
-        actionPlayer.on('revive', () => revivePlayer(player))
         initializeCombatPlayer(player)
         initializeStarterWeapon(player)
         await player.changeMap('nature-open-world', 'start')
@@ -84,6 +82,10 @@ export const player: RpgPlayerHooks = {
     },
     onInput(player: RpgPlayer, data: any) {
         const action = String(data?.action ?? data?.input ?? '')
+        if (action === 'revive') {
+            revivePlayer(player)
+            return
+        }
         if (action === 'escape') {
             const openMenu = (player as any)._gui?.['rpg-main-menu']
             if (!openMenu) void player.callMainMenu()

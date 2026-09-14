@@ -14,7 +14,7 @@ async function loadTypeScriptModule(relativePath) {
     source = source
       .replace(/import \{ disposeAgent, enableAgent, takeControl, toggleAgent \} from '.\/autonomy\.ts'/, 'const disposeAgent=()=>{}; const enableAgent=()=>{}; const takeControl=()=>{}; const toggleAgent=()=>{}')
       .replace(/import \{ handleAutonomyInput \} from '.\/player-input\.ts'/, 'const handleAutonomyInput=()=>{}')
-      .replace(/import \{ clearRespawnTimer, initializeCombatPlayer, revivePlayer \} from '.\/combat'/, 'const clearRespawnTimer=()=>{}; const initializeCombatPlayer=()=>{}; const revivePlayer=()=>{}')
+      .replace(/import \{ clearRespawnTimer, initializeCombatPlayer, revivePlayer \} from '.\/combat'/, 'const clearRespawnTimer=()=>{}; const initializeCombatPlayer=()=>{}; const revivePlayer=player=>{player.reviveCalls=(player.reviveCalls||0)+1}')
       .replace(/import \{ initializeStarterWeapon \} from '.\/weapons'/, 'const initializeStarterWeapon=()=>{}')
   }
   const result = await transformWithOxc(source, path)
@@ -75,6 +75,14 @@ test('Escape input opens the RPGJS main menu', async () => {
 
   player.onInput(mockPlayer, { action: 'agentToggle' })
   assert.equal(opened, 1)
+})
+
+test('revive input reaches the authoritative combat handler', async () => {
+  const { player } = await loadTypeScriptModule('src/modules/main/player.ts')
+  const mockPlayer = { reviveCalls: 0 }
+
+  player.onInput(mockPlayer, { action: 'revive' })
+  assert.equal(mockPlayer.reviveCalls, 1)
 })
 
 test('nearby dialogue targets include players and residents and exclude self', async () => {
