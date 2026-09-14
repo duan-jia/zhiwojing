@@ -10,6 +10,7 @@ import {
 } from './identity'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+export const AUTH_TOKEN_STORAGE_KEY = 'zhiwojing.auth-token'
 
 export function showLogin(): Promise<MockIdentity> {
   const root = document.querySelector<HTMLElement>('#login-root')
@@ -23,6 +24,22 @@ export function showLogin(): Promise<MockIdentity> {
   // OAuth callback supplies the authenticated profile.
   const selectedIdentity = DEFAULT_IDENTITY
   setActiveIdentity(selectedIdentity)
+
+  const ticket = new URLSearchParams(window.location.search).get('ticket')
+  if (ticket) {
+    return fetch(`${API}/api/auth/exchange`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ticket }),
+    }).then(async response => {
+      if (!response.ok) throw new Error('OAuth ticket exchange failed')
+      const session = await response.json() as { token: string }
+      localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, session.token)
+      history.replaceState({}, '', window.location.pathname)
+      root.hidden = true
+      game.hidden = false
+      return selectedIdentity
+    })
+  }
 
   root.innerHTML = `
     <main class="login-screen">
