@@ -1,6 +1,7 @@
 import os
 import logging
 import sqlite3
+import json
 import re
 import hashlib
 import secrets
@@ -286,31 +287,40 @@ async def _oauth_profile(access_token: str) -> dict[str, object]:
     except (httpx.HTTPError, ValueError) as error:
         raise HTTPException(502, detail={"code": "OAUTH_PROFILE_FAILED", "message": "无法读取知乎账号信息。"}) from error
     profile: object = payload
-    # The Open Platform `/user` response has changed shape between
-    # deployments (plain object, or wrapped in `data`/`user`/`profile`).
-    # Unwrap dictionaries and a possible single-item data list without
-    # logging the upstream payload, which could contain private fields.
-    for _ in range(4):
-        if isinstance(profile, dict):
-            nested = next(
-                (profile[key] for key in ("data", "user", "profile") if key in profile),
-                None,
-            )
-            if isinstance(nested, dict) or (isinstance(nested, list) and len(nested) == 1 and isinstance(nested[0], dict)):
-                profile = nested[0] if isinstance(nested, list) else nested
-                continue
-        break
+    # `/user` has been observed with lower/upper-case wrappers and, on some
+    # deployments, JSON-encoded `data`. Find the first nested object carrying
+    # a stable identifier without exposing the upstream payload.
+    def find_profile(value: object) -> dict[str, object] | None:
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except (TypeError, ValueError):
+                return None
+        if isinstance(value, dict):
+            normalized = {str(key).lower(): item for key, item in value.items()}
+            if any(normalized.get(key) for key in ("id", "user_id", "userid", "url_token", "urltoken")):
+                return {str(key): item for key, item in value.items()}
+            for item in value.values():
+                found = find_profile(item)
+                if found is not None:
+                    return found
+        elif isinstance(value, list):
+            for item in value:
+                found = find_profile(item)
+                if found is not None:
+                    return found
+        return None
+
+    profile = find_profile(profile) or profile
     if not isinstance(profile, dict):
         raise HTTPException(502, detail={"code": "OAUTH_INVALID_PROFILE", "message": "知乎返回的账号信息无效。", "failedStage": "profile_parse"})
     # Depending on the Open Platform deployment, the stable user identifier
     # may be exposed as `id`, `user_id`, or `url_token`. Normalize it so the
     # rest of the callback does not depend on one response variant.
-    profile_id = (
-        profile.get("id")
-        or profile.get("user_id")
-        or profile.get("userId")
-        or profile.get("url_token")
-        or profile.get("urlToken")
+    profile_values = {str(key).lower(): value for key, value in profile.items()}
+    profile_id = next(
+        (profile_values.get(key) for key in ("id", "user_id", "userid", "url_token", "urltoken") if profile_values.get(key)),
+        None,
     )
     if not profile_id:
         # Key names are safe diagnostic metadata; values are intentionally
@@ -898,7 +908,8 @@ async def oauth_callback(request: Request, code: str | None = None, authorizatio
     token_payload = await _oauth_exchange(code)
     profile = await _oauth_profile(str(token_payload["access_token"]))
     zhihu_id = str(profile["id"])
-    name = str(profile.get("name") or profile.get("fullname") or profile.get("url_token") or profile.get("urlToken") or "知乎用户")[:100]
+    profile_values = {str(key).lower(): value for key, value in profile.items()}
+    name = str(profile_values.get("name") or profile_values.get("fullname") or profile_values.get("url_token") or profile_values.get("urltoken") or "知乎用户")[:100]
     with Session(engine) as session:
         user = session.exec(select(User).where(User.zhihu_id == zhihu_id)).first()
         if user is None:
