@@ -2,6 +2,7 @@ interface OAuthStatus {
   configured: boolean
   integrationReady: boolean
   authorized: boolean
+  missingConfiguration?: string[]
   user?: { id: number; name: string; profile?: { interests?: string[]; style?: string } } | null
 }
 
@@ -41,6 +42,9 @@ export function showLogin(): Promise<MockIdentity> {
               <span class="oauth-icon">知</span>
               <span><strong>正在读取登录状态…</strong><small>知乎 OAuth</small></span>
             </button>
+            <button type="button" class="enter-game-button">
+              <span>▶</span> 游客体验
+            </button>
           </div>
           <p class="login-status" role="status">请使用知乎账号完成认证后进入。</p>
         </div>
@@ -57,8 +61,33 @@ export function showLogin(): Promise<MockIdentity> {
   const oauthButton = root.querySelector<HTMLButtonElement>('.oauth-login-button')
   const oauthLabel = oauthButton?.querySelector<HTMLElement>('strong')
   const oauthDetail = oauthButton?.querySelector<HTMLElement>('small')
+  const guestButton = root.querySelector<HTMLButtonElement>('.enter-game-button')
   const status = root.querySelector<HTMLElement>('.login-status')
   let resolveLogin: ((identity: MockIdentity) => void) | undefined
+  guestButton?.addEventListener('click', async () => {
+    guestButton.disabled = true
+    guestButton.textContent = '正在进入知我境…'
+    try {
+      const response = await fetch(`${API}/api/auth/guest`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        signal: AbortSignal.timeout(5000),
+      })
+      if (!response.ok) throw new Error('guest login failed')
+      const result = await response.json() as { token?: string; user?: { id?: number; name?: string } }
+      if (result.token) window.localStorage.setItem('zhiwojing.auth-token', result.token)
+      const identity: MockIdentity = result.user?.id
+        ? { id: result.user.id, name: result.user.name || '游客', tagline: '知我境体验用户' }
+        : selectedIdentity
+      setActiveIdentity(identity)
+      resolveLogin?.(identity)
+    } catch {
+      guestButton.disabled = false
+      guestButton.innerHTML = '<span>▶</span> 游客体验'
+      if (status) status.textContent = '游客登录失败，请稍后重试。'
+    }
+  }, { once: true })
   void fetch(`${API}/api/oauth/status`, {
     credentials: 'include',
     signal: AbortSignal.timeout(5000),
@@ -76,9 +105,22 @@ export function showLogin(): Promise<MockIdentity> {
           ? '知乎登录开发中'
           : '知乎登录暂未开放'
       oauthDetail.textContent = oauth.integrationReady ? '连接你的知乎账号' : 'OAuth 接口已预留 · 后续开放'
-      if (status) status.textContent = oauth.integrationReady
-        ? '认证后将返回知我境。'
-        : '知乎认证服务尚未启用，请稍后再试。'
+      if (status) {
+        if (oauth.integrationReady) {
+          status.textContent = '认证后将返回知我境。'
+        } else if (oauth.missingConfiguration?.length) {
+          const labels: Record<string, string> = {
+            app_id: 'App ID',
+            redirect_uri: '公网回调地址',
+            app_key: 'OAuth App Key',
+            access_secret: 'Access Secret',
+          }
+          const missing = oauth.missingConfiguration.map(item => labels[item] || item).join('、')
+          status.textContent = `知乎登录尚未配置：缺少 ${missing}。`
+        } else {
+          status.textContent = '知乎认证服务尚未启用，请稍后再试。'
+        }
+      }
       if (oauth.authorized) {
         const user = oauth.user
         const identity: MockIdentity = user

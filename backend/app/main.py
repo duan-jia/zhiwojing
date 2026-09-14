@@ -205,6 +205,7 @@ def oauth_configuration() -> dict[str, object]:
     app_id = os.getenv("ZHIHU_OAUTH_APP_ID", "").strip()
     redirect_uri = os.getenv("ZHIHU_OAUTH_REDIRECT_URI", "").strip()
     app_key_configured = bool(os.getenv("ZHIHU_OAUTH_APP_KEY", "").strip())
+    access_secret_configured = bool(os.getenv("ZHIHU_ACCESS_SECRET", "").strip())
     app_id_configured = bool(re.fullmatch(r"\d+", app_id))
 
     callback_configured = is_public_oauth_callback(redirect_uri)
@@ -213,6 +214,7 @@ def oauth_configuration() -> dict[str, object]:
         "app_id": app_id_configured,
         "redirect_uri": callback_configured,
         "app_key": app_key_configured,
+        "access_secret": access_secret_configured,
     }
     missing = [name for name, configured in configured_fields.items() if not configured]
     return {
@@ -284,20 +286,37 @@ async def _oauth_profile(access_token: str) -> dict[str, object]:
     except (httpx.HTTPError, ValueError) as error:
         raise HTTPException(502, detail={"code": "OAUTH_PROFILE_FAILED", "message": "无法读取知乎账号信息。"}) from error
     profile: object = payload
-    if isinstance(profile, dict):
-        for key in ("data", "user", "profile"):
-            nested = profile.get(key)
-            if isinstance(nested, dict):
-                profile = nested
-                break
+    # The Open Platform `/user` response has changed shape between
+    # deployments (plain object, or wrapped in `data`/`user`/`profile`).
+    # Unwrap dictionaries and a possible single-item data list without
+    # logging the upstream payload, which could contain private fields.
+    for _ in range(4):
+        if isinstance(profile, dict):
+            nested = next(
+                (profile[key] for key in ("data", "user", "profile") if key in profile),
+                None,
+            )
+            if isinstance(nested, dict) or (isinstance(nested, list) and len(nested) == 1 and isinstance(nested[0], dict)):
+                profile = nested[0] if isinstance(nested, list) else nested
+                continue
+        break
     if not isinstance(profile, dict):
-        raise HTTPException(502, detail={"code": "OAUTH_INVALID_PROFILE", "message": "知乎返回的账号信息无效。"})
+        raise HTTPException(502, detail={"code": "OAUTH_INVALID_PROFILE", "message": "知乎返回的账号信息无效。", "failedStage": "profile_parse"})
     # Depending on the Open Platform deployment, the stable user identifier
     # may be exposed as `id`, `user_id`, or `url_token`. Normalize it so the
     # rest of the callback does not depend on one response variant.
-    profile_id = profile.get("id") or profile.get("user_id") or profile.get("url_token")
+    profile_id = (
+        profile.get("id")
+        or profile.get("user_id")
+        or profile.get("userId")
+        or profile.get("url_token")
+        or profile.get("urlToken")
+    )
     if not profile_id:
-        raise HTTPException(502, detail={"code": "OAUTH_INVALID_PROFILE", "message": "知乎返回的账号信息无效。"})
+        # Key names are safe diagnostic metadata; values are intentionally
+        # omitted so no profile or token data can leak through the error.
+        keys = sorted(str(key) for key in profile.keys())[:30]
+        raise HTTPException(502, detail={"code": "OAUTH_INVALID_PROFILE", "message": "知乎返回的账号信息无效。", "failedStage": "profile_parse", "profileKeys": keys})
     return {**profile, "id": profile_id}
 
 app = FastAPI(title="数字分身 API", version="0.1.0")
@@ -879,7 +898,7 @@ async def oauth_callback(request: Request, code: str | None = None, authorizatio
     token_payload = await _oauth_exchange(code)
     profile = await _oauth_profile(str(token_payload["access_token"]))
     zhihu_id = str(profile["id"])
-    name = str(profile.get("name") or profile.get("url_token") or "知乎用户")[:100]
+    name = str(profile.get("name") or profile.get("fullname") or profile.get("url_token") or profile.get("urlToken") or "知乎用户")[:100]
     with Session(engine) as session:
         user = session.exec(select(User).where(User.zhihu_id == zhihu_id)).first()
         if user is None:
