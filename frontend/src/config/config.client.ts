@@ -86,6 +86,15 @@ export default {
         spritesheets: [
           ...townBuildingSprites,
           {
+            id: 'death-grave',
+            image: 'spritesheets/death-grave.png',
+            // The source keeps a large transparent canvas. Align the visible
+            // soil base with the player's feet and render the grave at 32 px.
+            displayScale: 32 / 569,
+            anchor: [647.5 / 1254, 999 / 1254],
+            ...withCombatAnimationAliases(Presets.RMSpritesheet(1, 1))
+          },
+          {
             id: 'hero',
             image: 'spritesheets/hero.png',
             ...withCombatAnimationAliases(Presets.RMSpritesheet(3, 4))

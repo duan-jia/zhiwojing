@@ -2,6 +2,7 @@ export const PLAYER_MAX_HP = 100
 export const PLAYER_ATTACK_DAMAGE = 25
 export const RESPAWN_INVINCIBILITY_MS = 3_000
 export const AUTONOMOUS_RESPAWN_MS = 30_000
+export const DEATH_GRAPHIC_ID = 'death-grave'
 
 export function readSignal<T>(value: T | (() => T)): T {
   return typeof value === 'function' ? (value as () => T)() : value
@@ -32,6 +33,12 @@ export function shouldAutoRespawn(player: any): boolean {
   return Boolean(readSignal(player?.agentMode ?? false))
 }
 
+export function showCombatDeath(player: any): void {
+  player.animationName?.set?.('stand')
+  player.animationFixed = true
+  player.setGraphic?.(DEATH_GRAPHIC_ID)
+}
+
 export function canTargetCombatPlayer(attacker: any, target: any): boolean {
   const targetIsEvent = typeof target?.isEvent === 'function' && target.isEvent()
   const targetIsNpc = targetIsEvent && Boolean(target?.combatNpc)
@@ -43,5 +50,8 @@ export function restoreCombatPlayer(player: any): void {
   const defeated = player.defeated
   if (defeated && typeof defeated.set === 'function') defeated.set(false)
   else player.defeated = false
+  player.setGraphic?.(player.aliveGraphic || 'liukanshan')
+  player.animationName?.set?.('stand')
+  player.animationFixed = false
   player.canMove = true
 }

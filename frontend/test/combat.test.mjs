@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { applyCombatDamage, applyFixedDamage, canTargetCombatPlayer, isDefeated, restoreCombatPlayer, shouldAutoRespawn } from '../src/combat-state.ts'
+import { DEATH_GRAPHIC_ID, applyCombatDamage, applyFixedDamage, canTargetCombatPlayer, isDefeated, restoreCombatPlayer, shouldAutoRespawn, showCombatDeath } from '../src/combat-state.ts'
 import { isAttackKey, processCombatKey } from '../src/combat-input-logic.ts'
 import { normalizeHp } from '../src/combat-hud-logic.ts'
 import { COMBAT_ANIMATION_KEYS, combatAnimations, resolveCombatAnimation, withCombatAnimationAliases } from '../src/combat-animation-logic.ts'
@@ -56,6 +56,28 @@ test('respawn restores full health, movement, and synchronized defeated state', 
   assert.equal(defeated, false)
 })
 
+test('death swaps to the grave and respawn restores the avatar graphic', () => {
+  const graphics = []
+  const player = {
+    aliveGraphic: 'female',
+    animationFixed: false,
+    animationName: { set: value => { player.currentAnimation = value } },
+    setGraphic: value => graphics.push(value),
+    currentAnimation: 'walk',
+    hp: 0,
+    defeated: true,
+    canMove: false,
+  }
+  showCombatDeath(player)
+  assert.equal(player.animationFixed, true)
+  assert.equal(player.currentAnimation, 'stand')
+  assert.equal(graphics.at(-1), DEATH_GRAPHIC_ID)
+  restoreCombatPlayer(player)
+  assert.equal(player.animationFixed, false)
+  assert.equal(player.currentAnimation, 'stand')
+  assert.equal(graphics.at(-1), 'female')
+})
+
 test('J maps to action once and editable fields are ignored', () => {
   const sent = []
   assert.equal(processCombatKey({ processAction: action => sent.push(action) }, { key: 'j' }), true)
@@ -81,7 +103,7 @@ test('all Action Battle animation keys explicitly avoid missing RMSpritesheet fr
   for (const key of ['attack', 'hurt', 'stagger', 'die', 'skill', 'guard', 'parry']) assert.equal(safeSheet.textures[key], stand)
 })
 
-test('remote health labels normalize live and defeated player state', () => {
-  assert.deepEqual(remotePlayerHealthView(75, false), { current: 75, max: 100, percent: 75, isDown: false, label: '75/100' })
-  assert.deepEqual(remotePlayerHealthView(-1, false), { current: 0, max: 100, percent: 0, isDown: true, label: '倒地 · 0/100' })
+test('remote health states normalize live and defeated players', () => {
+  assert.deepEqual(remotePlayerHealthView(75, false), { current: 75, max: 100, percent: 75, isDown: false })
+  assert.deepEqual(remotePlayerHealthView(-1, false), { current: 0, max: 100, percent: 0, isDown: true })
 })

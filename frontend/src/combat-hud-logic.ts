@@ -12,6 +12,5 @@ export function remotePlayerHealthView(hp: unknown, defeated: unknown, maxHp = P
   return {
     ...normalized,
     isDown,
-    label: isDown ? `倒地 · ${normalized.current}/${normalized.max}` : `${normalized.current}/${normalized.max}`,
   }
 }

@@ -65,6 +65,7 @@ export const player: RpgPlayerHooks = {
     },
     async onConnected(player: RpgPlayer) {
         player.name = '体验用户'
+        ;(player as any).aliveGraphic = 'liukanshan'
         player.setGraphic('liukanshan')
         initializeCombatPlayer(player)
         initializeStarterWeapon(player)
@@ -111,6 +112,7 @@ export const player: RpgPlayerHooks = {
         }
         synchronizedPlayer.avatarId.set(avatarId)
         ;(player as any).authToken = String(context.query.token || '')
+        ;(player as any).aliveGraphic = profile.graphic
         player.name = `${profile.name} · ${shortId}`
         player.setGraphic(profile.graphic)
         startPresenceHeartbeat(player)

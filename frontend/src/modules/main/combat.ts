@@ -1,6 +1,6 @@
 import type { RpgPlayer } from '@rpgjs/server'
 import { setActionBattleInvincibility } from '@rpgjs/action-battle/server'
-import { AUTONOMOUS_RESPAWN_MS, PLAYER_ATTACK_DAMAGE, PLAYER_MAX_HP, RESPAWN_INVINCIBILITY_MS, applyCombatDamage, canTargetCombatPlayer, isDefeated, restoreCombatPlayer, shouldAutoRespawn } from '../../combat-state'
+import { AUTONOMOUS_RESPAWN_MS, PLAYER_ATTACK_DAMAGE, PLAYER_MAX_HP, RESPAWN_INVINCIBILITY_MS, applyCombatDamage, canTargetCombatPlayer, isDefeated, restoreCombatPlayer, shouldAutoRespawn, showCombatDeath } from '../../combat-state'
 import { pauseAgent, resumeAgent } from './autonomy'
 import { combatAnimations } from '../../combat-animation-logic'
 
@@ -29,6 +29,7 @@ export function defeatPlayer(player: RpgPlayer) {
   runtime.canMove = false
   runtime.stopMoveTo?.()
   runtime.pendingInputs = []
+  showCombatDeath(runtime)
   pauseAgent(runtime)
   if (shouldAutoRespawn(runtime)) {
     clearRespawnTimer(runtime)
