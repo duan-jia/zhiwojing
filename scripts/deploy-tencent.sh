@@ -13,6 +13,12 @@ backend_dir="${repo_dir}/backend"
 frontend_dir="${repo_dir}/frontend"
 env_file="/etc/zhihu.env"
 
+env_value() {
+  local key="$1"
+  [[ -r "${env_file}" ]] || return 0
+  awk -F= -v key="${key}" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' "${env_file}"
+}
+
 read -r -p "主域名 [duanzhiwojing.site]: " domain
 domain="${domain:-duanzhiwojing.site}"
 read -r -p "游戏子域名 [game.${domain}]: " game_domain
@@ -87,10 +93,28 @@ install -d -m 755 "${public_root}"
 cp -a "${web_root}/." "${public_root}/"
 web_root="${public_root}"
 
-echo "配置线上 OAuth（密钥不会写入仓库）。没有凭证可直接回车，之后再编辑 ${env_file}。"
-read -r -p "知乎 App ID（数字）: " app_id
-read -r -s -p "知乎 OAuth App Key（输入不会显示）: " app_key; echo
-read -r -s -p "知乎 Access Secret（输入不会显示）: " access_secret; echo
+echo "配置线上 OAuth（密钥不会写入仓库）。已保存的值直接回车即可保留。"
+app_id="$(env_value ZHIHU_OAUTH_APP_ID)"
+app_key="$(env_value ZHIHU_OAUTH_APP_KEY)"
+access_secret="$(env_value ZHIHU_ACCESS_SECRET)"
+if [[ -n "${app_id}" ]]; then
+  read -r -p "知乎 App ID [已保存，回车保留]: " new_app_id
+  [[ -n "${new_app_id}" ]] && app_id="${new_app_id}"
+else
+  read -r -p "知乎 App ID（数字）: " app_id
+fi
+if [[ -n "${app_key}" ]]; then
+  read -r -s -p "知乎 OAuth App Key [已保存，回车保留；输入不会显示]: " new_app_key; echo
+  [[ -n "${new_app_key}" ]] && app_key="${new_app_key}"
+else
+  read -r -s -p "知乎 OAuth App Key（输入不会显示）: " app_key; echo
+fi
+if [[ -n "${access_secret}" ]]; then
+  read -r -s -p "知乎 Access Secret [已保存，回车保留；输入不会显示]: " new_access_secret; echo
+  [[ -n "${new_access_secret}" ]] && access_secret="${new_access_secret}"
+else
+  read -r -s -p "知乎 Access Secret（输入不会显示）: " access_secret; echo
+fi
 
 cat > "${env_file}" <<EOF
 ZHIHU_OAUTH_APP_ID=${app_id}
