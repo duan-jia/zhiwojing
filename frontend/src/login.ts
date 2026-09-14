@@ -64,8 +64,10 @@ export function showLogin(): Promise<MockIdentity> {
   const oauthDetail = oauthButton?.querySelector<HTMLElement>('small')
   const guestButton = root.querySelector<HTMLButtonElement>('.enter-game-button')
   const status = root.querySelector<HTMLElement>('.login-status')
+  const oauthReturn = new URLSearchParams(window.location.search).get('oauth') === 'success'
   let resolveLogin: ((identity: MockIdentity) => void) | undefined
   let entered = false
+  let authorizedOAuthUser: OAuthStatus['user']
   const enterGame = (identity: MockIdentity) => {
     if (entered) return
     entered = true
@@ -100,6 +102,21 @@ export function showLogin(): Promise<MockIdentity> {
     } catch {
       return false
     }
+  }
+  const completeOAuthSession = async (user: OAuthStatus['user']) => {
+    const sessionResponse = await fetch(`${API}/api/auth/session`, {
+      method: 'POST', credentials: 'include', signal: AbortSignal.timeout(5000),
+    })
+    if (!sessionResponse.ok) throw new Error('OAuth session unavailable')
+    const session = await sessionResponse.json() as { token: string; user?: OAuthStatus['user'] }
+    if (!session.token) throw new Error('OAuth session missing token')
+    if (entered) return
+    completeLogin(session.token, session.user || user, '知乎用户')
+  }
+  const clearOAuthReturnMarker = () => {
+    const url = new URL(window.location.href)
+    url.searchParams.delete('oauth')
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
   }
   guestButton?.addEventListener('click', async () => {
     if (entered || guestButton.disabled) return
@@ -157,15 +174,14 @@ export function showLogin(): Promise<MockIdentity> {
         }
       }
       if (oauth.authorized) {
-        const sessionResponse = await fetch(`${API}/api/auth/session`, {
-          method: 'POST', credentials: 'include', signal: AbortSignal.timeout(5000),
-        })
-        if (!sessionResponse.ok) throw new Error('OAuth session unavailable')
-        const session = await sessionResponse.json() as { token: string; user?: OAuthStatus['user'] }
-        if (!session.token) throw new Error('OAuth session missing token')
-        if (entered) return
-        completeLogin(session.token, session.user || oauth.user, '知乎用户')
-        return
+        authorizedOAuthUser = oauth.user
+        oauthLabel.textContent = '继续进入知我境'
+        oauthDetail.textContent = oauth.user?.name || '已连接知乎账号'
+        if (status) status.textContent = '已认证，点击继续进入。'
+        if (oauthReturn) {
+          await completeOAuthSession(oauth.user)
+          clearOAuthReturnMarker()
+        }
       }
     })
     .catch(() => {
@@ -177,10 +193,20 @@ export function showLogin(): Promise<MockIdentity> {
 
   return new Promise(resolve => {
     resolveLogin = resolve
-    oauthButton?.addEventListener('click', () => {
+    oauthButton?.addEventListener('click', async () => {
       if (oauthButton.disabled) return
+      if (authorizedOAuthUser) {
+        oauthButton.disabled = true
+        try {
+          await completeOAuthSession(authorizedOAuthUser)
+        } catch {
+          oauthButton.disabled = false
+          if (status) status.textContent = '登录会话暂时不可用，请稍后重试。'
+        }
+        return
+      }
       window.location.assign(`${API}/api/oauth/start`)
-    }, { once: true })
+    })
     // The OAuth callback reloads the page and will eventually provide the
     // authenticated identity. Keep this promise pending until then.
     void resolve

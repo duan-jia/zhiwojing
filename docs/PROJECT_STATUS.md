@@ -76,6 +76,7 @@ FastAPI 已接入可关闭、可降级的 Mem0 长期记忆：主人私有 `avat
 
 - 游客登录成功后隐藏登录页并显示游戏；请求失败后可以再次点击重试。
 - 游客与知乎 OAuth 登录现统一收敛到 FastAPI 应用 Session：前端集中保存应用 Token、为浏览器业务请求添加 Bearer 鉴权，并在刷新后通过 `/api/me` 恢复身份。本地一键启动默认开启 `AUTH_REQUIRED=1`，因此游客链路会经过与线上相同的 FastAPI 和 RPGJS 身份校验。
+- 仅刚完成的 OAuth 回调携带一次性 `oauth=success` 标记并自动进入游戏；普通刷新即使 OAuth Session 仍有效也会停留在登录页，由用户点击“继续进入知我境”。标记在成功换取浏览器应用 Session 后立即从地址栏移除。
 - OAuth 按黑客松模板区分授权与可选账号资料：换取 Token 成功后，`/user` 读取或解析失败不再阻断进入。没有稳定知乎 ID 时创建 `zhihu_id=null` 的独立本地分身，不关联已有账号；重新授权可能创建新分身。
 - OAuth Token 仅存 FastAPI 进程内存，过期或进程重启后需重新授权。`/api/oauth/status` 提供 `profileAvailable` 和脱敏 `profileWarning`；`POST /api/auth/session` 将当前本地应用会话凭证交给 RPGJS，绝不返回知乎 Token。
 - `POST /api/oauth/run-all` 使用当前会话的 OAuth Token 最小验证五项正式用户接口，空收藏夹跳过收藏夹内容。现有个人数据 Provider 与 Agent 工具仍沿用原配置，该验证接口不改变其身份契约。

@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from ipaddress import ip_address
 from typing import Literal, Optional
-from urllib.parse import urlencode, urlparse
+from urllib.parse import parse_qsl, urlencode, urlparse
 from contextlib import suppress
 
 import httpx
@@ -1103,6 +1103,10 @@ async def oauth_callback(request: Request, code: str | None = None, authorizatio
         "profile_warning": profile_warning,
     }
     target = os.getenv("ZHIHU_OAUTH_SUCCESS_REDIRECT", "/")
+    parsed_target = urlparse(target)
+    target_query = [(key, value) for key, value in parse_qsl(parsed_target.query, keep_blank_values=True) if key != "oauth"]
+    target_query.append(("oauth", "success"))
+    target = parsed_target._replace(query=urlencode(target_query)).geturl()
     response = RedirectResponse(target, status_code=303)
     response.set_cookie("session_token", token, httponly=True, secure=request.url.scheme == "https", samesite="lax", max_age=30 * 86400)
     return response

@@ -71,7 +71,7 @@ test('lightweight panels explicitly override the RPG UI reset text color', async
 
 // Execute the login controller with a minimal DOM so retries and visibility
 // are checked as behavior, independently of the RPG renderer.
-async function loginHarness(respond, initialStorage = []) {
+async function loginHarness(respond, initialStorage = [], currentUrl = 'http://test/') {
   const { default: ts } = await import('typescript')
   const { runInNewContext } = await import('node:vm')
   class Element {
@@ -98,6 +98,8 @@ async function loginHarness(respond, initialStorage = []) {
     setItem: (key, value) => storage.set(key, value),
     removeItem: key => storage.delete(key),
   }
+  const location = new URL(currentUrl)
+  location.assign = () => {}
   runInNewContext(code, {
     exports,
     require: specifier => specifier === './api'
@@ -108,11 +110,15 @@ async function loginHarness(respond, initialStorage = []) {
         }
       : { DEFAULT_IDENTITY: { id: 1 }, setActiveIdentity() {} },
     document: { querySelector: selector => elements[selector] },
-    window: { localStorage },
-    fetch: respond, AbortSignal,
+    window: {
+      localStorage,
+      location,
+      history: { state: null, replaceState(_state, _unused, url) { location.href = new URL(url, location.href).href } },
+    },
+    fetch: respond, AbortSignal, URL, URLSearchParams,
   })
   const result = exports.showLogin()
-  return { elements, result, storage }
+  return { elements, result, storage, location }
 }
 
 test('guest failure can be retried and successful login reveals the game', async () => {
@@ -133,12 +139,28 @@ test('guest failure can be retried and successful login reveals the game', async
   assert.equal(harness.storage.get('zhiwojing.auth-token'), 'guest-token')
 })
 
-test('authorized OAuth return reveals the game', async () => {
+test('an existing OAuth session waits on the login page until the user continues', async () => {
   const harness = await loginHarness(async url => ({ ok: true, json: async () => url.endsWith('/session') ? { token: 'oauth-session' } : ({ authorized: true, integrationReady: true, user: { id: 5, name: '知乎用户' } }) }))
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(harness.elements['#login-root'].hidden, false)
+  assert.equal(harness.elements['#rpg'].hidden, true)
+  await harness.elements['.oauth-login-button'].click()
   assert.equal((await harness.result).id, 5)
   assert.equal(harness.storage.get('zhiwojing.auth-token'), 'oauth-session')
   assert.equal(harness.elements['#login-root'].hidden, true)
   assert.equal(harness.elements['#rpg'].hidden, false)
+})
+
+test('a successful OAuth callback enters once and removes its URL marker', async () => {
+  const harness = await loginHarness(
+    async url => ({ ok: true, json: async () => url.endsWith('/session') ? { token: 'oauth-session', user: { id: 5, name: '知乎用户' } } : ({ authorized: true, integrationReady: true, user: { id: 5, name: '知乎用户' } }) }),
+    [],
+    'http://test/?oauth=success',
+  )
+  assert.equal((await harness.result).id, 5)
+  assert.equal(harness.elements['#login-root'].hidden, true)
+  assert.equal(harness.elements['#rpg'].hidden, false)
+  assert.equal(harness.location.search, '')
 })
 
 test('stored guest session waits for a click before resuming through the authenticated me endpoint', async () => {

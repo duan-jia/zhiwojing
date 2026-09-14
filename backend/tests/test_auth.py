@@ -103,6 +103,7 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
             state = parse_qs(urlparse(start.headers['location']).query)['state'][0]
             callback = await self.client.get('/auth/callback', params={'authorization_code': 'test-code', 'state': state})
         self.assertEqual(callback.status_code, 303)
+        self.assertEqual(parse_qs(urlparse(callback.headers['location']).query)['oauth'], ['success'])
         status = (await self.client.get('/api/oauth/status')).json()
         self.assertTrue(status['authorized'])
         self.assertFalse(status['profileAvailable'])
