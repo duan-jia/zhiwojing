@@ -17,8 +17,8 @@ read -r -p "主域名 [duanzhiwojing.site]: " domain
 domain="${domain:-duanzhiwojing.site}"
 read -r -p "游戏子域名 [game.${domain}]: " game_domain
 game_domain="${game_domain:-game.${domain}}"
-read -r -p "服务器公网 IPv4 [116.30.139.215]: " server_ip
-server_ip="${server_ip:-116.30.139.215}"
+read -r -p "服务器公网 IPv4 [111.230.152.143]: " server_ip
+server_ip="${server_ip:-111.230.152.143}"
 
 echo "将部署 ${domain}（前端/API）和 ${game_domain}（RPGJS/WebSocket）。"
 echo "请确认 DNS 已将 ${domain} 和 ${game_domain} 的 A 记录指向 ${server_ip}。"
@@ -79,6 +79,13 @@ npm run build
 
 dist_root="${frontend_dir}/dist"
 [[ -f "${dist_root}/client/index.html" ]] && web_root="${dist_root}/client" || web_root="${dist_root}"
+# Serve static files from /var/www so Nginx (www-data) can read them even when
+# the repository lives below /home/ubuntu with restrictive directory modes.
+public_root="/var/www/zhiwojing"
+rm -rf "${public_root}"
+install -d -m 755 "${public_root}"
+cp -a "${web_root}/." "${public_root}/"
+web_root="${public_root}"
 
 echo "配置线上 OAuth（密钥不会写入仓库）。没有凭证可直接回车，之后再编辑 ${env_file}。"
 read -r -p "知乎 App ID（数字）: " app_id
