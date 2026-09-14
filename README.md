@@ -1,143 +1,145 @@
-# 知乎数字分身 MVP
+# 知我境 · 知乎数字分身小镇
 
-“灵魂匹配局：社区 × 社交”是一个把知乎的内容发现、问题讨论与创作表达转化为可探索多人世界的数字分身原型。用户进入知乎主题小镇，在热榜、藏书阁、问道馆、创作坊等地标中发现议题、交流观点，并与具有独立人设和长期记忆的数字分身对话。
+> 「灵魂匹配局：社区 × 社交」把斯坦福小镇（Generative Agents）的方法论搬进一个由知乎内容驱动的实时多人世界。
 
-本项目同时提供面向初审和产品讨论的[产品说明计划书](docs/PRODUCT_PLAN.md)，以及记录真实实现边界的[项目状态](docs/PROJECT_STATUS.md)。README 侧重快速理解和运行项目；计划书侧重创作思路、知乎生态价值与技术落地方案。
+我们不把知乎搬进游戏，而是把知乎的**内容关系**映射成**空间关系**，把**作者**映射成有长期记忆的**数字分身**：热榜是公共议题入口，藏书阁是资料检索入口，问道馆是问题理解入口，创作坊是表达生产入口，知我居是个人分身入口。用户在同一个世界里发现议题、交流观点、积累关系，再把自己的理解带回知乎。
 
-当前 MVP 已接入 RPGJS 多人地图、知乎公共内容 Tool Registry、Agent 对话、人设冷启动与可降级长期记忆。知乎 OAuth 个人数据入口仍按授权状态开放，尚未授权时不会把服务端凭证所属账号冒充为当前玩家。
+前端像素小镇是我们的实验场，不是作品的卖点；这个仓库真正值得看的是**世界模型、记忆系统与 Agent 运行时**三块。
 
-## 本地运行
+## 一、架构总览
 
-完成依赖安装后，推荐在仓库根目录一键启动完整本地链路：
-
-```bash
-./scripts/run-local.sh
+```text
+┌─────────────────────── 浏览器（RPGJS Client）───────────────────────┐
+│  地图渲染 / 输入 / 地标与对话面板 / 战斗表现                        │
+└───────────┬───────────────────────────────────────┬────────────────┘
+            │ WebSocket                              │ HTTP
+            ▼                                        ▼
+┌─ RPGJS Node Server（世界权威，默认 8001）─┐  ┌─ FastAPI（大脑，默认 8000）─────────┐
+│ · 地图、碰撞、移动判定、多人房间同步     │  │ · 知乎 Tool Registry（11/4 工具权限）│
+│ · 托管分身状态机（巡游 / 到达 / 相遇）   │  │ · LangGraph ReAct Agent Loop        │
+│ · 身份校验（WS 升级时向 FastAPI 验证）   │  │ · Mem0 语义记忆 + SQLite 结构化记忆 │
+│ · 在线租约与断线清理                     │  │ · OAuth 边界与人设冷启动            │
+└──────────────────────────────────────────┘  └─────────────────────────────────────┘
 ```
 
-它会构建前端并启动 FastAPI 8000、RPGJS world 8001 和 Vite 5173；任一服务退出时会停止其余进程。没有模型密钥时仍可进入世界，托管角色会显示“本地巡游中”并使用确定性地标巡游。
+**为什么切成两半。** 游戏世界要的是高频、确定性、可回滚的物理与房间状态；知识和推理要的是低频、可降级、可替换的模型调用。两者混在一个进程里，任何一次 LLM 抖动都会拖慢整个世界。因此 RPGJS 独占世界权威——FastAPI 不保存地图、房间或移动状态；FastAPI 独占知识与推理——浏览器永远不接触任何凭证。两者通过 HTTP 契约协作，未来可以替换前端或接入别的 Agent Runtime。
 
-## 腾讯云一键部署
+## 二、设计① 把 Generative Agents 映射到知我境
 
-在 Ubuntu 腾讯云轻量服务器上，从仓库根目录运行：
+斯坦福 Generative Agents 论文里有五个关键构件：**记忆流、检索、反思、规划、社交**。我们把它拆成可工程化的形态，并针对「真实 MMO + 知乎生态 + 成本约束」做了取舍：
+
+| Generative Agents | 知我境实现 | 取舍与原因 |
+|---|---|---|
+| 记忆流：带时间戳的自然语言记录 | Mem0 向量库（嵌入式 Qdrant + 本地 `bge-small-zh-v1.5`）+ `episodes` 结构化事件 | 中文短文本本地嵌入，不依赖外部 API；结构化字段可审计 |
+| 检索 = 近因 × 重要度 × 相关度 | 作用域过滤（`avatar:{id}` / `pair:{a}-{b}`）+ 近因排序 + 语义检索，pair 记忆取最近 5 位伙伴 | 暂不做重要度评分；优先保证**隔离正确**与**成本可预测** |
+| 反思：周期性高层洞察 | 会话结束由一次 LLM 结构化摘要（`summary/topics/mood/familiarity_delta/relation_tag`），主人对话每 6 条提炼 `facts/prefs/todos` | 单次调用产出 JSON；失败不阻塞对话 |
+| 规划：日计划递归分解 | `/api/agent/step` 每 ≥30 秒返回一个高层意图（`move` / `say` / `idle`） | 移动由 RPGJS 本地状态机执行，**LLM 不参与逐帧控制** |
+| 社交：对话、关系、信息传播 | 2 格内相遇触发交谈，写入 pair 记忆，双向更新熟悉度与关系标签 | 60 秒冷却 + 全局并发闸门，避免「社交风暴」烧掉成本 |
+
+与斯坦福的**三个本质差异**也是我们的设计重点：
+
+1. **实时 MMO**：斯坦福是离线仿真，我们是真人在线和托管分身共存的世界——所有移动与战斗必须由服务端权威判定。
+2. **成本约束**：斯坦福可以不计成本地跑一整季；我们必须给每个分身设预算：30 秒决策间隔、5 秒超时、15/30/60 秒退避、进程级并发上限 3。
+3. **权限边界**：斯坦福的 Agent 只和彼此说话；我们的分身要替主人访问知乎数据，因此工具按关系收窄（见第四节）。
+
+## 三、设计② 长期记忆：可隔离、可审计、可降级
+
+记忆分两级作用域，由**服务端**按数值 ID 判定，客户端提供的 ID 永不作为权限依据：
+
+```text
+avatar:{id}           主人私有：事实 / 偏好 / 待办，仅本人分身可读
+pair:{min}-{max}      双方共享：共同经历，仅这两个身份可读（ID 排序保证唯一）
+```
+
+**写入路径**
+
+```text
+主人 ↔ 自己分身     每累计 6 条消息 → 一次 LLM → facts/prefs/todos（infer=true）→ private
+访客/相遇对话        每轮回复 → 一次 LLM → summary/topics/mood/familiarity_delta/relation_tag
+                     （infer=false）→ pair + relationships + episodes
+内容哈希作幂等键：重复写入不产生脏数据
+```
+
+**存储分层**
+
+- `Mem0`（嵌入式 Qdrant）：语义检索层，负责「记得住」；
+- `avatar_profiles` / `relationships` / `episodes`（SQLite）：结构化事实、熟悉度、关系标签、事件时间线，负责「说得清」；
+- `persona_cards`：知乎数据冷启动的人设卡（一次 LLM 抽取兴趣领域、表达风格、观点摘要），独立于记忆开关。
+
+**检索与隐私**
+
+- 主人对话：私有记忆全读 + 按 `last_met_at` 取最近 5 位伙伴的 pair 记忆；
+- 他人对话：只读该 pair，绝不枚举私有作用域；
+- prompt 注入上限约 1200 字符、人设卡约 300 字符，防止上下文失控。
+
+**降级**
+
+`MEMORY_ENABLED=0` 可完全关闭；`mem0ai` / `fastembed` / `onnxruntime` 惰性导入，缺失、初始化失败、模型不可用时只记日志，chat 与 step 的主流程不被阻断——这是刻意的产品选择：实验性能力不能成为单点故障。
+
+## 四、设计③ LangGraph Agent Loop：带权限的工具调用
+
+`/api/agent/chat` 每次请求按分身人设启动一个 LangGraph ReAct Agent：
+
+```text
+用户消息 ──► create_react_agent(LLM, tools, prompt, checkpointer)
+                │
+                ├─ 工具来自知乎 Tool Registry（共享领域模型 + Provider 可切换）
+                └─ checkpointer = SqliteSaver（MEMORY_DATA_DIR，跨进程重启延续会话）
+```
+
+**工具权限按关系收窄**（`user_id == avatar_id` 时是主人，否则是访客）：
+
+| 工具组 | 数量 | 内容 | 主人 | 访客 |
+|---|---|---|---|---|
+| 公共内容 | 4 | 热榜、知乎搜索、全网搜索、问题推荐 | ✅ | ✅ |
+| 创作能力 | 2 | 知乎直答、草稿生成 | ✅ | ❌ |
+| 个人数据 | 5 | 本人内容、关注、收藏、收藏夹、创作统计 | ✅ | ❌ |
+
+`ToolContext.user_id` 只由宿主注入，永远不出现在模型可见的参数里——模型没有任何途径伪造身份或越权读取知乎数据。
+
+**双契约**：`chat` 返回整段回复（对话/相遇），`step` 返回单步 JSON 意图（`move/say/idle`）。200 行不到的 `agent.py` 里还包含完整的错误分类（`LLM_NOT_CONFIGURED` / `LLM_AUTH_FAILED` / `LLM_RATE_LIMITED` / `LLM_UNAVAILABLE`）与可重试语义，前端据此决定重试、降级巡游还是提示用户。
+
+## 五、世界层：托管挂机与相遇
+
+- 玩家上线默认进入托管；按 `G` 切换，任何移动输入立即真人接管；
+- 托管移动只下发 `moveTo` 目标（内置 7 个地标点），服务端每 1 秒以物理中心 48px 半径检测到达，15 秒超时兜底；
+- LLM 只异步提供下一段意图：每玩家 ≥30 秒一次、5 秒超时、失败按 15/30/60 秒退避，模型不可用时显示「本地巡游中」；
+- 2 格内相遇触发对话：60 秒/对冷却，先手方发起，`pair` 记忆落库；对话永不阻塞移动；
+- 断线后角色与计时器即刻清理，在线状态由 15 秒租约、45 秒过期维护。
+
+## 六、能力现状（诚实版）
+
+**已接通**：多人小镇与六个可交互地标、知乎热榜/搜索/全网搜索/问题推荐/直答/草稿生成、LangGraph Agent 对话与行为意图、两级长期记忆、人设冷启动、托管挂机与相遇、通讯录与远程消息（离线由分身代答，连续自动回复上限 5 条）、游客与知乎 OAuth 双登录、PvP 动作战斗 v2（连击/闪避/格挡/蓄力 + 头顶血条）。
+
+**已知边界**：托管仅限页面在线（无离线常驻实体）；知乎个人数据需 OAuth 授权；藏书阁知识库、天工坊 PDF/PPT 生产、状态效果与技能栏属于后续阶段；战斗的连击/格挡/蓄力目前是逻辑级测试覆盖，手感待真机试玩调参。
+
+## 七、快速开始
 
 ```bash
+# 一键启动完整链路（FastAPI 8000 + RPGJS world 8001 + Vite 5173）
+./scripts/run-local.sh
+
+# 腾讯云部署（写 systemd 服务 + Nginx + HTTPS）
 sudo bash scripts/deploy-tencent.sh
 ```
 
-脚本会构建前端（写入 `VITE_API_URL=https://duanzhiwojing.site` 和 `VITE_RPGJS_SERVER_HOST=game.duanzhiwojing.site`）、将静态文件复制到 `/var/www/zhiwojing`、创建 FastAPI/RPGJS 的 systemd 服务、重启服务、生成 Nginx 配置并尝试申请 HTTPS。它默认使用 `duanzhiwojing.site`、`game.duanzhiwojing.site` 和服务器公网 IP `111.230.152.143`，也会交互询问这些值、模型 API Key 及 OAuth 凭证；模型 API Key 为必填项，已保存的值可直接回车复用。模型和 OAuth 凭证只写入服务器 `/etc/zhihu.env`（权限 600），不会写入仓库；运行前请先将两个域名的 DNS A 记录指向服务器公网 IP。当前版本的 OAuth 路由仍是安全占位接口，真实授权流程需在后续版本启用。
+没有模型密钥也能进入世界：托管角色会显示「本地巡游中」并执行确定性地标巡游。模型 Key 与知乎 Access Secret 保存在仓库外（本地 `~/.config/zhiwojing/secrets.env`，线上 `/etc/zhihu.env`，权限 600），不写入源码与前端。
 
-也可以分别启动。先启动 FastAPI「大脑」服务（Python 3.11+）：
+## 八、接口与验证
 
-```bash
-cd backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
-```
-
-本地测试 Agent 聊天和知乎能力时，先交互式保存模型 API Key 与知乎 Access Secret，再使用统一启动脚本：
+主要接口：`/api/agent/chat`、`/api/agent/step`、`/api/memory/coldstart`、`/api/persona`、`/api/contacts`、`/api/messages/*`、`/api/zhihu/*`、`/api/auth/*`、`/api/oauth/*`；游戏侧为 RPGJS WebSocket 世界链路。
 
 ```bash
-cd backend
-./scripts/configure-local-llm.sh
-./scripts/run-local.sh
+cd backend && python -m unittest discover -s tests -v   # 后端单测（75 项）
+cd frontend && npm test                                  # 前端单测（含 12 项战斗）
+cd frontend && npm run test:e2e:combat                   # 真机双客户端战斗 smoke
 ```
 
-两项密钥保存在仓库外的 `~/.config/zhiwojing/secrets.env`，文件权限为 `600`，不会写入仓库、命令参数或日志。需要更换时可直接编辑该文件，保持以下格式（值不要加引号），然后重启后端：
+## 文档导航
 
-```text
-LLM_API_KEY=<模型 API Key>
-ZHIHU_ACCESS_SECRET=<知乎开放平台 Access Secret>
-```
-
-启动脚本只接受上述两个白名单变量。Agent 默认通过 `https://api.openai-next.com/v1` 调用 `deepseek-v4-flash`；仍可使用进程环境中的 `LLM_BASE_URL` 和 `LLM_MODEL` 覆盖。部署时应改用部署平台的 Secret 管理，不要复制本机密钥文件。
-
-再构建并启动独立的 RPGJS 世界服务（Node 22.12+，建议使用 Node 24）：
-
-```bash
-cd frontend
-npm ci
-npm run build
-npm run server
-```
-
-另开终端启动 Web 客户端：
-
-```bash
-cd frontend
-npm run dev
-```
-
-打开 http://localhost:5173。客户端默认连接 `localhost:8001`；跨主机部署时通过 `VITE_RPGJS_SERVER_HOST` 指定 RPGJS 地址。登录页可选择并记住体验用户、苏晚或周博三个本地 Mock 身份；该选择仅用于本地 Demo，不是生产认证。进入世界后使用 WASD 或方向键移动，按 B 打开自己的分身，靠近两格内的玩家或居民后按 E（或点击人物）打开对方分身。RPGJS gameplay 在独立 Node 进程中运行，并作为移动、地图与多人同步的唯一世界权威；多个浏览器客户端加入同一 RPGJS 房间后可互见与同步移动。FastAPI 不再承载游戏房间或移动状态，只保留知乎 Tool Registry、REST 能力与 Agent Loop 契约。
-
-## 知乎开放平台配置
-
-知乎能力通过 FastAPI 服务端调用知乎开放平台，前端不会接触 Access Secret。先在知乎开放平台个人中心申请个人 Access Secret；本地开发推荐写入上面的仓库外 `secrets.env` 并通过 `./scripts/run-local.sh` 自动加载。临时运行也可以通过终端环境提供：
-
-```bash
-export ZHIHU_ACCESS_SECRET='<your-access-secret>'
-uvicorn app.main:app --reload --port 8000
-```
-
-不要把 Access Secret 写入源码、项目内 `.env`、日志或前端配置。没有配置时，知乎能力会返回明确的未配置状态，不会伪造结果。
-
-默认使用结构化 HTTP API。四项公共内容能力也可以切换到知乎官方 MCP 服务：
-
-```bash
-export ZHIHU_PUBLIC_PROVIDER=mcp
-uvicorn app.main:app --reload --port 8000
-```
-
-可选值只有 `http` 和 `mcp`，默认为 `http`。两种 Provider 共用领域模型和 Tool Registry，不会在调用失败时自动切换，以免重复消耗额度。官方问题推荐目前独立走 HTTP API；本地草稿生成通过 `DraftProvider` 接入。Registry 暴露以下六个工具，可供后续 Agent Runtime 直接转换为模型工具：
-
-- `question_recommendations`
-- `hot_list`
-- `zhihu_search`
-- `global_search`
-- `zhida`
-- `generate_draft`
-
-`ToolContext.user_id` 只由宿主传入，不会出现在模型工具参数中；`oauth_token` 仅为后续阶段预留。当前 `generate_draft` 使用本地模板 Provider，未来接外部模型时保持相同输入输出契约即可。
-
-## OAuth 授权
-
-配置 OAuth 应用凭证后，登录页会跳转到知乎授权页；回调会校验一次性 state、换取令牌并建立 HttpOnly 会话：
-
-- `GET /api/oauth/status`：检查配置状态并列出五类预留的用户数据能力
-- `GET /api/oauth/start`：生成 state 并重定向到知乎授权页
-- `GET /auth/callback`：校验 state、换取令牌、读取账号资料并建立会话
-- `POST /api/oauth/run-all`：预留创作、关注、收藏夹、收藏内容和近期收藏聚合
-- `POST /api/oauth/logout`：幂等退出接口
-
-后续通过部署平台的 Secret/环境变量提供配置，不要创建或提交 `.env`：
-
-```text
-ZHIHU_OAUTH_APP_ID=<公开的数字 App ID>
-ZHIHU_OAUTH_REDIRECT_URI=https://<公网域名>/auth/callback
-ZHIHU_OAUTH_APP_KEY=<OAuth App Key>
-ZHIHU_ACCESS_SECRET=<开放平台 Access Secret>
-```
-
-App ID、OAuth App Key 和 Access Secret 是三种不同凭证，不能互相替代。App Key 和 Access Secret 不得写入前端、源码、日志或 Git。本地地址只能预览页面；真实知乎登录必须使用与开放平台登记值完全一致的公网 HTTPS 回调地址。
-
-## 接口
-
-- `GET /api/health`：服务健康检查
-- `GET /api/me`：当前用户和表达画像
-- `GET /api/zhihu/question-recommendations?query=人工智能&count=5`：按主题推荐适合回答的问题
-- `GET /api/zhihu/hot?limit=10`：获取 1–30 条真实知乎热榜
-- `GET /api/zhihu/search?query=人工智能&count=10`：搜索知乎内容
-- `GET /api/zhihu/global-search?query=人工智能&count=10&search_db=all`：搜索全网内容
-- `POST /api/zhihu/answer`：调用知乎直答，请求体为 `{"query":"...","model":"zhida-fast-1p5"}`
-- `POST /api/avatar/draft`：根据想法生成个人风格草稿，可附带最多 10 条 `references`
-- `POST /api/agent/chat`：运行分身 Agent Loop；`POST /api/agent/step` 返回分身下一段高层行为意图；`POST /api/agent/init` 仍是 HTTP 501 契约占位接口
-
-问题推荐的 `query` 在 API 层可省略；省略时使用服务端 Access Secret 所属账号画像，而不是当前 mock 用户画像。第一版前端要求填写主题，只调用主题推荐模式。
-
-`idea` 去除首尾空白后至少 3 个字符；`goal` 支持 `知乎回答`（默认）和 `知乎文章`。`tone` 支持 `清晰、真诚、有条理`、`幽默`、`严肃`，未支持的语气会回退到默认模板并在说明中提示。
-
-## 验证
-
-前端：在 `frontend/` 运行 `npm run build` 同时生成 `dist/client` 浏览器产物及 `dist/server` RPGJS Node 世界服务；`npm run server` 启动世界权威。`npm test` 覆盖地图、登录、身份同步、附近目标选择、对话接线和生产预览；Canvas 点击仍需在浏览器中人工走查。
-
-后端：安装依赖后，在 `backend/` 运行 `python -m unittest discover -s tests -v`。测试使用临时 SQLite 数据库，覆盖输入校验、语气和结构、用户初始化及接口错误。
+- [产品说明计划书](docs/PRODUCT_PLAN.md)：面向评审的完整叙事与架构说明
+- [项目状态](docs/PROJECT_STATUS.md)：逐项实现边界与验证情况
+- [分身记忆](docs/MEMORY.md)：作用域、写入、表结构与降级
+- [身份与鉴权](docs/AUTH.md)：会话、WS 校验与前端契约
+- [动作战斗](docs/ACTION_BATTLE.md)：规则、按键与已知限制
+- [小镇布局](docs/TOWN_LAYOUT.md)：地图与建筑
