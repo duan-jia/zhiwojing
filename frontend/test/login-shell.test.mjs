@@ -124,6 +124,7 @@ test('guest failure can be retried and successful login reveals the game', async
 test('authorized OAuth return reveals the game', async () => {
   const harness = await loginHarness(async url => ({ ok: true, json: async () => url.endsWith('/session') ? { token: 'oauth-session' } : ({ authorized: true, integrationReady: true, user: { id: 5, name: '知乎用户' } }) }))
   assert.equal((await harness.result).id, 5)
+  assert.equal(harness.storage.get('zhiwojing.auth-token'), 'oauth-session')
   assert.equal(harness.elements['#login-root'].hidden, true)
   assert.equal(harness.elements['#rpg'].hidden, false)
 })

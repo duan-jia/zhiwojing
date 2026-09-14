@@ -43,3 +43,13 @@ class OAuthProfileTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(detail['upstreamCode'], 20000)
         self.assertNotIn('private-value', str(detail))
         self.assertNotIn('secret-value', str(detail))
+
+    async def test_token_exchange_accepts_template_envelopes(self):
+        for payload in [
+            {'access_token': 'token', 'expires_in': 3600},
+            {'code': 20000, 'data': {'access_token': 'token', 'expires_in': 3600}},
+            {'Code': 0, 'Data': {'access_token': 'token', 'expires_in': 3600}},
+        ]:
+            client = httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=payload)))
+            with patch.object(main, '_oauth_ready'), patch.object(main.httpx, 'AsyncClient', return_value=client):
+                self.assertEqual((await main._oauth_exchange('code'))['access_token'], 'token')
