@@ -283,10 +283,22 @@ async def _oauth_profile(access_token: str) -> dict[str, object]:
             payload = response.json()
     except (httpx.HTTPError, ValueError) as error:
         raise HTTPException(502, detail={"code": "OAUTH_PROFILE_FAILED", "message": "无法读取知乎账号信息。"}) from error
-    profile = payload.get("data") if isinstance(payload, dict) and isinstance(payload.get("data"), dict) else payload
-    if not isinstance(profile, dict) or not profile.get("id"):
+    profile: object = payload
+    if isinstance(profile, dict):
+        for key in ("data", "user", "profile"):
+            nested = profile.get(key)
+            if isinstance(nested, dict):
+                profile = nested
+                break
+    if not isinstance(profile, dict):
         raise HTTPException(502, detail={"code": "OAUTH_INVALID_PROFILE", "message": "知乎返回的账号信息无效。"})
-    return profile
+    # Depending on the Open Platform deployment, the stable user identifier
+    # may be exposed as `id`, `user_id`, or `url_token`. Normalize it so the
+    # rest of the callback does not depend on one response variant.
+    profile_id = profile.get("id") or profile.get("user_id") or profile.get("url_token")
+    if not profile_id:
+        raise HTTPException(502, detail={"code": "OAUTH_INVALID_PROFILE", "message": "知乎返回的账号信息无效。"})
+    return {**profile, "id": profile_id}
 
 app = FastAPI(title="数字分身 API", version="0.1.0")
 app.add_middleware(
