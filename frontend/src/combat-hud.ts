@@ -1,4 +1,4 @@
-import { normalizeHp } from './combat-hud-logic'
+import { normalizeHp, requestRevive } from './combat-hud-logic'
 
 function signalValue(value: any) { return typeof value === 'function' ? value() : value }
 
@@ -9,7 +9,7 @@ export function setupCombatHud(engine: any) {
   document.body.appendChild(root)
   const fill = root.querySelector('i') as HTMLElement
   const button = root.querySelector('button') as HTMLButtonElement
-  button.addEventListener('click', () => engine.processAction('revive'))
+  button.addEventListener('click', () => requestRevive(engine))
 
   return {
     step() {

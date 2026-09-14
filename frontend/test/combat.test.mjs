@@ -5,6 +5,7 @@ import { isAttackKey, processCombatKey } from '../src/combat-input-logic.ts'
 import { normalizeHp } from '../src/combat-hud-logic.ts'
 import { COMBAT_ANIMATION_KEYS, combatAnimations, resolveCombatAnimation, withCombatAnimationAliases } from '../src/combat-animation-logic.ts'
 import { remotePlayerHealthView } from '../src/combat-hud-logic.ts'
+import { requestRevive } from '../src/combat-hud-logic.ts'
 
 test('fixed damage clamps hp and reports defeat', () => {
   const target = { hp: 100 }
@@ -106,4 +107,15 @@ test('all Action Battle animation keys explicitly avoid missing RMSpritesheet fr
 test('remote health states normalize live and defeated players', () => {
   assert.deepEqual(remotePlayerHealthView(75, false), { current: 75, max: 100, percent: 75, isDown: false })
   assert.deepEqual(remotePlayerHealthView(-1, false), { current: 0, max: 100, percent: 0, isDown: true })
+})
+
+test('revive bypasses movement lock and sends an authoritative action', () => {
+  const emitted = []
+  const processed = []
+  requestRevive({
+    socket: { emit: (...args) => emitted.push(args) },
+    processAction: action => processed.push(action),
+  })
+  assert.deepEqual(emitted, [['action', { action: 'revive' }]])
+  assert.deepEqual(processed, [])
 })
