@@ -264,10 +264,21 @@ async def _oauth_exchange(code: str) -> dict[str, object]:
 
 
 async def _oauth_profile(access_token: str) -> dict[str, object]:
-    endpoint = os.getenv("ZHIHU_OAUTH_USERINFO_URL", "https://openapi.zhihu.com/api/v4/me")
+    # The OAuth integration endpoint is `/user` on openapi.zhihu.com.  The
+    # `/api/v4/me` URL is a Zhihu consumer API endpoint and does not accept the
+    # open-platform OAuth token exchange used here.  OAuth user-data requests
+    # also require the server-side Open Platform Access Secret in addition to
+    # the per-user token.
+    endpoint = os.getenv("ZHIHU_OAUTH_USERINFO_URL", "https://openapi.zhihu.com/user")
     try:
+        access_secret = os.getenv("ZHIHU_ACCESS_SECRET", "").strip()
+        headers = {
+            "X-OAuth-Token": access_token,
+            "Authorization": f"Bearer {access_secret}",
+            "Content-Type": "application/json",
+        }
         async with httpx.AsyncClient(timeout=15) as client:
-            response = await client.get(endpoint, headers={"X-OAuth-Token": access_token, "Authorization": f"Bearer {access_token}"})
+            response = await client.get(endpoint, headers=headers)
             response.raise_for_status()
             payload = response.json()
     except (httpx.HTTPError, ValueError) as error:

@@ -123,6 +123,7 @@ if [[ -n "${access_secret}" ]]; then
 else
   read -r -s -p "知乎 Access Secret（输入不会显示）: " access_secret; echo
 fi
+[[ -n "${access_secret}" ]] || { echo "知乎 Access Secret 不能为空，无法启用知乎开放平台功能。" >&2; exit 1; }
 
 cat > "${env_file}" <<EOF
 LLM_API_KEY=${llm_api_key}
