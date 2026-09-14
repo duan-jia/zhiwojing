@@ -8,10 +8,12 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from ipaddress import ip_address
 from typing import Literal, Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlencode
 
-from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
+import httpx
+
+from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ValidationError
@@ -61,6 +63,40 @@ class AuthSession(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     expires_at: datetime = Field(index=True)
     revoked_at: Optional[datetime] = Field(default=None, index=True)
+
+
+class OAuthState(SQLModel, table=True):
+    __tablename__ = "oauth_states"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    state_hash: str = Field(index=True, unique=True)
+    user_id: Optional[int] = Field(default=None, index=True)
+    expires_at: datetime = Field(index=True)
+    used_at: Optional[datetime] = None
+
+
+class OAuthToken(SQLModel, table=True):
+    __tablename__ = "oauth_tokens"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True, unique=True)
+    access_token: str
+    token_type: str = "Bearer"
+    expires_at: datetime = Field(index=True)
+    authorized_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    revoked_at: Optional[datetime] = None
+    identity_limited: bool = False
+
+
+class AuthTicket(SQLModel, table=True):
+    __tablename__ = "auth_tickets"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    ticket_hash: str = Field(index=True, unique=True)
+    user_id: int = Field(index=True)
+    expires_at: datetime = Field(index=True)
+    used_at: Optional[datetime] = None
+
+
+class TicketExchangeRequest(BaseModel):
+    ticket: str
 
 
 class DevLoginRequest(BaseModel):
@@ -152,6 +188,7 @@ class OAuthStatusResponse(BaseModel):
     authorized: bool
     missingConfiguration: list[str]
     interfaces: list[OAuthInterface]
+    expiresAt: Optional[datetime] = None
 
 
 OAUTH_INTERFACES = [
@@ -196,7 +233,6 @@ def oauth_configuration() -> dict[str, object]:
     app_id = os.getenv("ZHIHU_OAUTH_APP_ID", "").strip()
     redirect_uri = os.getenv("ZHIHU_OAUTH_REDIRECT_URI", "").strip()
     app_key_configured = bool(os.getenv("ZHIHU_OAUTH_APP_KEY", "").strip())
-    access_secret_configured = bool(os.getenv("ZHIHU_ACCESS_SECRET", "").strip())
     app_id_configured = bool(re.fullmatch(r"\d+", app_id))
 
     callback_configured = is_public_oauth_callback(redirect_uri)
@@ -205,7 +241,6 @@ def oauth_configuration() -> dict[str, object]:
         "app_id": app_id_configured,
         "redirect_uri": callback_configured,
         "app_key": app_key_configured,
-        "access_secret": access_secret_configured,
     }
     missing = [name for name, configured in configured_fields.items() if not configured]
     return {
@@ -303,14 +338,15 @@ def _user_response(user: User) -> dict:
 
 @app.middleware("http")
 async def authenticate_request(request: Request, call_next):
-    public = request.url.path == "/api/health" or request.url.path.startswith("/api/auth/")
-    if request.method == "OPTIONS" or public:
+    public = (request.url.path == "/api/health" or request.url.path.startswith("/api/auth/")
+              or request.url.path in ("/api/oauth/start", "/auth/callback"))
+    if request.method == "OPTIONS":
         return await call_next(request)
     authenticated = _authenticated(request)
     if authenticated is not None:
         request.state.user_id = authenticated[0].id
         request.state.auth_session_id = authenticated[1].id
-    elif _token_from_request(request) is not None or _auth_required():
+    elif not public and (_token_from_request(request) is not None or _auth_required()):
         error = _auth_error("INVALID_TOKEN", "登录凭证无效、已过期或已注销。")
         return JSONResponse(status_code=401, content={"detail": error.detail})
     return await call_next(request)
@@ -328,8 +364,24 @@ def resolve_draft_profile(user_id: int) -> DraftProfile:
         )
 
 
-tool_registry = build_tool_registry(profile_resolver=resolve_draft_profile)
+def _oauth_access_for_user(user_id: int) -> str | None:
+    with Session(engine) as session:
+        token = session.exec(select(OAuthToken).where(OAuthToken.user_id == user_id)).first()
+        if token is None or token.revoked_at is not None:
+            return None
+        if _aware(token.expires_at) <= datetime.now(timezone.utc):
+            raise CapabilityError(401, "OAUTH_TOKEN_EXPIRED", "知乎授权已过期，请重新授权。")
+        return token.access_token
+
+
+tool_registry = build_tool_registry(profile_resolver=resolve_draft_profile, oauth_token_resolver=_oauth_access_for_user)
 user_zhihu_provider = HttpZhihuProvider()
+
+def _user_provider(user_id: int) -> tuple[HttpZhihuProvider, bool]:
+    access_token = _oauth_access_for_user(user_id)
+    if access_token:
+        return HttpZhihuProvider(oauth_token=access_token), False
+    return HttpZhihuProvider(), True
 
 def _build_agent_runtime():
     try:
@@ -511,7 +563,8 @@ async def memory_coldstart(payload: ColdstartRequest, request: Request):
         if not session.get(User, user_id):
             raise HTTPException(404, detail={"code": "USER_NOT_FOUND", "message": "用户不存在"})
     try:
-        return await run_coldstart(user_id, user_zhihu_provider, communication_store)
+        provider, _ = _user_provider(user_id)
+        return await run_coldstart(user_id, provider, communication_store)
     except CapabilityError as error:
         raise HTTPException(error.status_code, detail={"code": error.code, "message": error.message, "retryable": error.retryable}) from error
     except AgentRuntimeError as error:
@@ -736,51 +789,177 @@ async def execute_user_request(call):
 
 
 @app.get("/api/zhihu/user/contents", response_model=UserContentsResult)
-async def zhihu_user_contents(content_type: Literal["all", "answer", "article", "zvideo", "pin", "question"] = "all", limit: int = Query(default=20, ge=1, le=50)):
-    return await execute_user_request(user_zhihu_provider.user_contents(content_type, limit))
+async def zhihu_user_contents(request: Request, response: Response, content_type: Literal["all", "answer", "article", "zvideo", "pin", "question"] = "all", limit: int = Query(default=20, ge=1, le=50)):
+    provider, fallback = _user_provider(_request_user_id(request)); response.headers["X-Zhihu-Auth-Source"] = "app_fallback" if fallback else "user_oauth"
+    return await execute_user_request(provider.user_contents(content_type, limit))
 
 
 @app.get("/api/zhihu/user/followees", response_model=UserFolloweesResult)
-async def zhihu_user_followees(limit: int = Query(default=20, ge=1, le=50)):
-    return await execute_user_request(user_zhihu_provider.user_followees(limit))
+async def zhihu_user_followees(request: Request, limit: int = Query(default=20, ge=1, le=50)):
+    provider, _ = _user_provider(_request_user_id(request)); return await execute_user_request(provider.user_followees(limit))
 
 
 @app.get("/api/zhihu/user/collections", response_model=UserCollectionsResult)
-async def zhihu_user_collections(limit: int = Query(default=20, ge=1, le=50)):
-    return await execute_user_request(user_zhihu_provider.user_collections(limit))
+async def zhihu_user_collections(request: Request, limit: int = Query(default=20, ge=1, le=50)):
+    provider, _ = _user_provider(_request_user_id(request)); return await execute_user_request(provider.user_collections(limit))
 
 
 @app.get("/api/zhihu/user/favlists", response_model=UserFavlistsResult)
-async def zhihu_user_favlists(limit: int = Query(default=20, ge=1, le=50)):
-    return await execute_user_request(user_zhihu_provider.user_favlists(limit))
+async def zhihu_user_favlists(request: Request, limit: int = Query(default=20, ge=1, le=50)):
+    provider, _ = _user_provider(_request_user_id(request)); return await execute_user_request(provider.user_favlists(limit))
 
 
 @app.get("/api/zhihu/user/creator-stats", response_model=CreatorStatsResult)
-async def zhihu_creator_stats():
-    return await execute_user_request(user_zhihu_provider.creator_account_stats())
+async def zhihu_creator_stats(request: Request):
+    provider, _ = _user_provider(_request_user_id(request)); return await execute_user_request(provider.creator_account_stats())
+
+
+def _aware(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def _oauth_error(status: int, code: str, message: str, retryable: bool = False) -> HTTPException:
+    return HTTPException(status, detail={"code": code, "message": message, "retryable": retryable})
 
 
 @app.get("/api/oauth/status", response_model=OAuthStatusResponse)
-async def oauth_status():
+async def oauth_status(request: Request):
     configuration = oauth_configuration()
+    token = None
+    user_id = getattr(request.state, "user_id", None)
+    if user_id is not None:
+        with Session(engine) as session:
+            token = session.exec(select(OAuthToken).where(OAuthToken.user_id == user_id)).first()
+            if token and (token.revoked_at is not None or _aware(token.expires_at) <= datetime.now(timezone.utc)):
+                token = None
     return OAuthStatusResponse(
         configured=bool(configuration["configured"]),
         callbackConfigured=bool(configuration["callback_configured"]),
-        integrationReady=False,
-        authorized=False,
+        integrationReady=bool(configuration["configured"]),
+        authorized=token is not None,
         missingConfiguration=list(configuration["missing"]),
         interfaces=OAUTH_INTERFACES,
+        expiresAt=token.expires_at if token else None,
     )
 
 
 @app.get("/api/oauth/start")
-async def oauth_start():
-    oauth_unavailable()
+async def oauth_start(request: Request):
+    configuration = oauth_configuration()
+    if not configuration["configured"]:
+        raise _oauth_error(503, "OAUTH_NOT_CONFIGURED", "知乎 OAuth 配置不完整或无效。")
+    state = secrets.token_urlsafe(32)
+    with Session(engine) as session:
+        session.add(OAuthState(
+            state_hash=hashlib.sha256(state.encode()).hexdigest(),
+            user_id=getattr(request.state, "user_id", None),
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
+        ))
+        session.commit()
+    query = urlencode({"redirect_uri": os.environ["ZHIHU_OAUTH_REDIRECT_URI"].strip(),
+                       "app_id": os.environ["ZHIHU_OAUTH_APP_ID"].strip(), "response_type": "code", "state": state})
+    return RedirectResponse(f"https://openapi.zhihu.com/authorize?{query}", status_code=302)
 
 
 @app.get("/auth/callback")
-async def oauth_callback():
-    oauth_unavailable()
+async def oauth_callback(authorization_code: str | None = None, state: str | None = None):
+    if not oauth_configuration()["configured"]:
+        raise _oauth_error(503, "OAUTH_NOT_CONFIGURED", "知乎 OAuth 配置不完整或无效。")
+    if not authorization_code:
+        raise _oauth_error(400, "OAUTH_CODE_MISSING", "回调缺少 authorization_code。")
+    if not state:
+        raise _oauth_error(400, "OAUTH_STATE_MISSING", "回调缺少 state。")
+    now = datetime.now(timezone.utc)
+    with Session(engine) as session:
+        row = session.exec(select(OAuthState).where(OAuthState.state_hash == hashlib.sha256(state.encode()).hexdigest())).first()
+        if row is None:
+            raise _oauth_error(400, "OAUTH_STATE_INVALID", "state 无效。")
+        if row.used_at is not None:
+            raise _oauth_error(400, "OAUTH_STATE_REPLAYED", "state 已使用。")
+        if _aware(row.expires_at) <= now:
+            raise _oauth_error(400, "OAUTH_STATE_EXPIRED", "state 已过期。")
+        bound_user_id = row.user_id
+        row.used_at = now
+        session.add(row)
+        session.commit()
+    form = {"app_id": os.environ.get("ZHIHU_OAUTH_APP_ID", "").strip(),
+            "app_key": os.environ.get("ZHIHU_OAUTH_APP_KEY", "").strip(),
+            "grant_type": "authorization_code", "redirect_uri": os.environ.get("ZHIHU_OAUTH_REDIRECT_URI", "").strip(),
+            "code": authorization_code}
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post("https://openapi.zhihu.com/access_token", data=form)
+        if response.status_code >= 500:
+            raise _oauth_error(502, "OAUTH_UPSTREAM_UNAVAILABLE", "知乎授权服务暂时不可用。", True)
+        if not response.is_success:
+            raise _oauth_error(400, "OAUTH_CODE_REJECTED", "知乎拒绝了授权码。")
+        payload = response.json()
+        access_token = payload["access_token"]
+        token_type = payload.get("token_type", "Bearer")
+        expires_in = int(payload["expires_in"])
+    except HTTPException:
+        raise
+    except (httpx.RequestError, httpx.TimeoutException) as error:
+        raise _oauth_error(502, "OAUTH_UPSTREAM_UNAVAILABLE", "无法连接知乎授权服务。", True) from error
+    except (ValueError, KeyError, TypeError) as error:
+        raise _oauth_error(502, "OAUTH_INVALID_RESPONSE", "知乎授权服务返回无法识别的数据。") from error
+
+    identity = None
+    userinfo_url = os.getenv("ZHIHU_OAUTH_USERINFO_URL", "").strip()
+    if userinfo_url:
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                info_response = await client.get(userinfo_url, headers={"Authorization": f"{token_type} {access_token}"})
+            if info_response.is_success:
+                info = info_response.json()
+                identity = str(info.get("id") or info.get("url_token") or "") or None
+                identity_name = str(info.get("name") or "知乎用户")
+        except (httpx.RequestError, ValueError, TypeError):
+            identity = None
+    limited = identity is None
+    fallback_identity = "oauth-token-" + hashlib.sha256(access_token.encode()).hexdigest()[:24]
+    with Session(engine) as session:
+        user = session.get(User, bound_user_id) if bound_user_id else None
+        if user is None and identity:
+            user = session.exec(select(User).where(User.zhihu_id == identity)).first()
+        if user is None:
+            user = User(zhihu_id=identity or fallback_identity, kind="zhihu", name=identity_name if identity else "知乎用户")
+            session.add(user); session.flush()
+        else:
+            user.kind = "zhihu"
+            if identity:
+                user.zhihu_id = identity
+                user.name = identity_name
+            session.add(user)
+        old = session.exec(select(OAuthToken).where(OAuthToken.user_id == user.id)).first()
+        if old is None:
+            old = OAuthToken(user_id=user.id, access_token=access_token, expires_at=now + timedelta(seconds=expires_in))
+        old.access_token, old.token_type = access_token, token_type
+        old.expires_at, old.authorized_at, old.revoked_at = now + timedelta(seconds=expires_in), now, None
+        old.identity_limited = limited
+        session.add(old)
+        ticket = secrets.token_urlsafe(32)
+        session.add(AuthTicket(ticket_hash=hashlib.sha256(ticket.encode()).hexdigest(), user_id=user.id,
+                               expires_at=now + timedelta(seconds=60)))
+        session.commit()
+    frontend = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+    return RedirectResponse(f"{frontend}/auth/callback?{urlencode({'ticket': ticket, 'identity_limited': str(limited).lower()})}", status_code=302)
+
+
+@app.post("/api/auth/exchange")
+async def auth_exchange(payload: TicketExchangeRequest):
+    now = datetime.now(timezone.utc)
+    with Session(engine) as session:
+        row = session.exec(select(AuthTicket).where(AuthTicket.ticket_hash == hashlib.sha256(payload.ticket.encode()).hexdigest())).first()
+        if row is None or row.used_at is not None:
+            raise _oauth_error(400, "OAUTH_TICKET_INVALID", "ticket 无效或已使用。")
+        if _aware(row.expires_at) <= now:
+            raise _oauth_error(400, "OAUTH_TICKET_EXPIRED", "ticket 已过期。")
+        user = session.get(User, row.user_id)
+        row.used_at = now
+        product_token = _issue_token(session, row.user_id)
+        session.add(row); session.commit()
+        return {"token": product_token, "user": _user_response(user)}
 
 
 @app.post("/api/oauth/run-all")
@@ -792,7 +971,14 @@ async def oauth_run_all():
 
 
 @app.post("/api/oauth/logout")
-async def oauth_logout():
+async def oauth_logout(request: Request):
+    user_id = _request_user_id(request)
+    with Session(engine) as session:
+        token = session.exec(select(OAuthToken).where(OAuthToken.user_id == user_id)).first()
+        if token:
+            token.revoked_at = datetime.now(timezone.utc)
+            token.access_token = ""
+            session.add(token); session.commit()
     return {"ok": True}
 
 @app.post("/api/avatar/draft", response_model=DraftResult)
