@@ -197,7 +197,9 @@ ln -sfn "/etc/nginx/sites-available/${domain}" "/etc/nginx/sites-enabled/${domai
 rm -f /etc/nginx/sites-enabled/default
 nginx -t
 systemctl daemon-reload
-systemctl enable --now zhiwojing-api.service zhiwojing-world.service nginx
+systemctl enable zhiwojing-api.service zhiwojing-world.service nginx
+systemctl restart zhiwojing-api.service zhiwojing-world.service
+systemctl reload nginx
 
 if certbot --nginx --non-interactive --agree-tos --register-unsafely-without-email \
     -d "${domain}" -d "${game_domain}"; then

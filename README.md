@@ -24,7 +24,7 @@
 sudo bash scripts/deploy-tencent.sh
 ```
 
-脚本会构建前端、将静态文件复制到 `/var/www/zhiwojing`、创建 FastAPI/RPGJS 的 systemd 服务、生成 Nginx 配置并尝试申请 HTTPS。它默认使用 `duanzhiwojing.site`、`game.duanzhiwojing.site` 和服务器公网 IP `111.230.152.143`，也会交互询问这些值及 OAuth 凭证。OAuth 凭证只写入服务器 `/etc/zhihu.env`（权限 600），不会写入仓库；运行前请先将两个域名的 DNS A 记录指向服务器公网 IP。当前版本的 OAuth 路由仍是安全占位接口，真实授权流程需在后续版本启用。
+脚本会构建前端（写入 `VITE_API_URL=https://duanzhiwojing.site` 和 `VITE_RPGJS_SERVER_HOST=game.duanzhiwojing.site`）、将静态文件复制到 `/var/www/zhiwojing`、创建 FastAPI/RPGJS 的 systemd 服务、重启服务、生成 Nginx 配置并尝试申请 HTTPS。它默认使用 `duanzhiwojing.site`、`game.duanzhiwojing.site` 和服务器公网 IP `111.230.152.143`，也会交互询问这些值及 OAuth 凭证。OAuth 凭证只写入服务器 `/etc/zhihu.env`（权限 600），不会写入仓库；运行前请先将两个域名的 DNS A 记录指向服务器公网 IP。当前版本的 OAuth 路由仍是安全占位接口，真实授权流程需在后续版本启用。
 
 也可以分别启动。先启动 FastAPI「大脑」服务（Python 3.11+）：
 

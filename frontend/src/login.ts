@@ -6,8 +6,6 @@ interface OAuthStatus {
 import {
   DEFAULT_IDENTITY,
   type MockIdentity,
-  persistIdentity,
-  readStoredIdentity,
   setActiveIdentity,
 } from './identity'
 
@@ -18,12 +16,11 @@ export function showLogin(): Promise<MockIdentity> {
   const game = document.querySelector<HTMLElement>('#rpg')
 
   if (!root || !game) {
-    return Promise.resolve(readStoredIdentity(window.localStorage))
+    return Promise.resolve(DEFAULT_IDENTITY)
   }
 
-  // Keep the default avatar for the RPGJS compatibility contract. The login
-  // surface intentionally exposes no local persona picker: visitors enter as
-  // guests, while connected users use Zhihu OAuth.
+  // Keep the default avatar for the RPGJS compatibility contract until the
+  // OAuth callback supplies the authenticated profile.
   const selectedIdentity = DEFAULT_IDENTITY
   setActiveIdentity(selectedIdentity)
 
@@ -36,15 +33,14 @@ export function showLogin(): Promise<MockIdentity> {
           <div class="login-brand"><span class="login-logo">知</span><strong>知我境</strong></div>
           <p class="login-eyebrow">ZHIHU PIXEL WORLD · CHAPTER 01</p>
           <h1 id="login-title">未来在我们认识之前，<br><em>我们的 Agent 先认识。</em></h1>
-          <p class="login-intro">进入知我境，先让你的 Agent 遇见更多人，连接彼此的想法与灵感。</p>
+          <p class="login-intro">使用知乎账号认证后进入知我境，让你的 Agent 遇见更多人，连接彼此的想法与灵感。</p>
           <div class="login-actions">
-            <button type="button" class="enter-game-button"><span>▶</span> 以游客身份进入</button>
             <button type="button" class="oauth-login-button" disabled>
               <span class="oauth-icon">知</span>
               <span><strong>正在读取登录状态…</strong><small>知乎 OAuth</small></span>
             </button>
           </div>
-          <p class="login-status" role="status">当前以游客身份进入，不会发起真实授权。</p>
+          <p class="login-status" role="status">请使用知乎账号完成认证后进入。</p>
         </div>
         <div class="login-character" aria-label="像素旅人">
           <div class="login-speech">准备好了吗？</div>
@@ -56,7 +52,6 @@ export function showLogin(): Promise<MockIdentity> {
     </main>
   `
 
-  const guestButton = root.querySelector<HTMLButtonElement>('.enter-game-button')
   const oauthButton = root.querySelector<HTMLButtonElement>('.oauth-login-button')
   const oauthLabel = oauthButton?.querySelector<HTMLElement>('strong')
   const oauthDetail = oauthButton?.querySelector<HTMLElement>('small')
@@ -78,26 +73,23 @@ export function showLogin(): Promise<MockIdentity> {
           ? '知乎登录开发中'
           : '知乎登录暂未开放'
       oauthDetail.textContent = oauth.integrationReady ? '连接你的知乎账号' : 'OAuth 接口已预留 · 后续开放'
-      if (oauth.integrationReady && status) {
-        status.textContent = '可以连接知乎账号，也可以继续以游客身份进入。'
-      }
+      if (status) status.textContent = oauth.integrationReady
+        ? '认证后将返回知我境。'
+        : '知乎认证服务尚未启用，请稍后再试。'
     })
     .catch(() => {
       if (oauthLabel) oauthLabel.textContent = '知乎登录暂不可用'
-      if (oauthDetail) oauthDetail.textContent = '仍可使用游客身份进入'
-      if (status) status.textContent = '暂时无法读取登录状态，仍可使用游客身份进入。'
+      if (oauthDetail) oauthDetail.textContent = '认证服务暂时不可用'
+      if (status) status.textContent = '暂时无法读取知乎认证状态，请稍后刷新。'
     })
 
-  oauthButton?.addEventListener('click', () => {
-    window.location.assign(`${API}/api/oauth/start`)
-  })
-
   return new Promise(resolve => {
-    guestButton?.addEventListener('click', () => {
-      persistIdentity(selectedIdentity, window.localStorage)
-      game.hidden = false
-      root.remove()
-      resolve(selectedIdentity)
+    oauthButton?.addEventListener('click', () => {
+      if (oauthButton.disabled) return
+      window.location.assign(`${API}/api/oauth/start`)
     }, { once: true })
+    // The OAuth callback reloads the page and will eventually provide the
+    // authenticated identity. Keep this promise pending until then.
+    void resolve
   })
 }

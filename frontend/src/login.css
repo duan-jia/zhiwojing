@@ -557,6 +557,11 @@ button:focus-visible {
   width: min(390px, 100%);
 }
 
+.login-actions:has(.oauth-login-button:only-child) {
+  width: min(430px, 100%);
+  margin-top: 28px;
+}
+
 .enter-game-button,
 .oauth-login-button {
   min-height: 54px;
@@ -588,6 +593,23 @@ button:focus-visible {
   background: #f3eedc;
   color: #3c506b;
   text-align: left;
+}
+
+.oauth-login-button:not(:disabled) {
+  color: #fff;
+  background: #1772f6;
+  text-align: center;
+  justify-content: center;
+}
+
+.oauth-login-button:not(:disabled) .oauth-icon {
+  background: #0d58bf;
+  box-shadow: inset -4px -4px #0a438f;
+}
+
+.oauth-login-button:not(:disabled):hover {
+  background: #0f62d6;
+  transform: translateY(-2px);
 }
 
 .oauth-login-button:disabled {

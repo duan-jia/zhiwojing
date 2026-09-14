@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 
 const projectRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 
-test('login shell gates RPGJS startup and preserves guest and OAuth paths', async () => {
+test('login shell gates RPGJS startup behind Zhihu authentication', async () => {
   const [html, client, login, styles, contacts, menuInput, clientConfig, liukanshan] = await Promise.all([
     readFile(join(projectRoot, 'index.html'), 'utf8'),
     readFile(join(projectRoot, 'src', 'client.ts'), 'utf8'),
@@ -21,10 +21,10 @@ test('login shell gates RPGJS startup and preserves guest and OAuth paths', asyn
   assert.match(html, /id="login-root"/)
   assert.match(html, /id="rpg" hidden/)
   assert(client.indexOf('await showLogin()') < client.indexOf('startGame('))
-  assert.match(login, /以游客身份进入/)
+  assert.doesNotMatch(login, /以游客身份进入/)
   assert.match(login, /未来在我们认识之前，<br><em>我们的 Agent 先认识。<\/em>/)
   assert.doesNotMatch(login, /identity-picker|identity-option|选择本地体验身份/)
-  assert.match(login, /persistIdentity/)
+  assert.doesNotMatch(login, /persistIdentity/)
   assert.match(client, /avatar_id: String\(identity\.id\)/)
   assert.match(login, /\/api\/oauth\/status/)
   assert.match(login, /\/api\/oauth\/start/)
@@ -32,7 +32,7 @@ test('login shell gates RPGJS startup and preserves guest and OAuth paths', asyn
   assert.match(styles, /@media \(max-width: 720px\)/)
   assert.match(styles, /spritesheets\/liukanshan\.png/)
   assert.match(clientConfig, /id: 'liukanshan'/)
-  assert.match(clientConfig, /image: 'spritesheets\/liukanshan\.png'/)
+  assert.match(clientConfig, /image: 'spritesheets\/liukanshan-sword\.png'/)
   assert.equal(liukanshan.readUInt32BE(16), 192)
   assert.equal(liukanshan.readUInt32BE(20), 256)
   assert.doesNotMatch(html, /class="controls-hint"/)
