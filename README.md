@@ -24,7 +24,7 @@
 sudo bash scripts/deploy-tencent.sh
 ```
 
-脚本会构建前端（写入 `VITE_API_URL=https://duanzhiwojing.site` 和 `VITE_RPGJS_SERVER_HOST=game.duanzhiwojing.site`）、将静态文件复制到 `/var/www/zhiwojing`、创建 FastAPI/RPGJS 的 systemd 服务、重启服务、生成 Nginx 配置并尝试申请 HTTPS。它默认使用 `duanzhiwojing.site`、`game.duanzhiwojing.site` 和服务器公网 IP `111.230.152.143`，也会交互询问这些值及 OAuth 凭证。OAuth 凭证只写入服务器 `/etc/zhihu.env`（权限 600），不会写入仓库；运行前请先将两个域名的 DNS A 记录指向服务器公网 IP。当前版本的 OAuth 路由仍是安全占位接口，真实授权流程需在后续版本启用。
+脚本会构建前端（写入 `VITE_API_URL=https://duanzhiwojing.site` 和 `VITE_RPGJS_SERVER_HOST=game.duanzhiwojing.site`）、将静态文件复制到 `/var/www/zhiwojing`、创建 FastAPI/RPGJS 的 systemd 服务、重启服务、生成 Nginx 配置并尝试申请 HTTPS。它默认使用 `duanzhiwojing.site`、`game.duanzhiwojing.site` 和服务器公网 IP `111.230.152.143`，也会交互询问这些值、模型 API Key 及 OAuth 凭证；模型 API Key 为必填项，已保存的值可直接回车复用。模型和 OAuth 凭证只写入服务器 `/etc/zhihu.env`（权限 600），不会写入仓库；运行前请先将两个域名的 DNS A 记录指向服务器公网 IP。当前版本的 OAuth 路由仍是安全占位接口，真实授权流程需在后续版本启用。
 
 也可以分别启动。先启动 FastAPI「大脑」服务（Python 3.11+）：
 
@@ -99,13 +99,13 @@ uvicorn app.main:app --reload --port 8000
 
 `ToolContext.user_id` 只由宿主传入，不会出现在模型工具参数中；`oauth_token` 仅为后续阶段预留。当前 `generate_draft` 使用本地模板 Provider，未来接外部模型时保持相同输入输出契约即可。
 
-## OAuth 接口预留
+## OAuth 授权
 
-首版仅提供安全禁用的接口骨架，便于取得 OAuth 应用凭证后继续接入：
+配置 OAuth 应用凭证后，登录页会跳转到知乎授权页；回调会校验一次性 state、换取令牌并建立 HttpOnly 会话：
 
 - `GET /api/oauth/status`：检查配置状态并列出五类预留的用户数据能力
-- `GET /api/oauth/start`：真实授权尚未启用，返回明确的未配置或未实现错误
-- `GET /auth/callback`：预留授权回调，不保存或回显回调参数
+- `GET /api/oauth/start`：生成 state 并重定向到知乎授权页
+- `GET /auth/callback`：校验 state、换取令牌、读取账号资料并建立会话
 - `POST /api/oauth/run-all`：预留创作、关注、收藏夹、收藏内容和近期收藏聚合
 - `POST /api/oauth/logout`：幂等退出接口
 

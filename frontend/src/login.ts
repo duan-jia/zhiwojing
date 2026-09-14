@@ -1,6 +1,8 @@
 interface OAuthStatus {
   configured: boolean
   integrationReady: boolean
+  authorized: boolean
+  user?: { id: number; name: string; profile?: { interests?: string[]; style?: string } } | null
 }
 
 import {
@@ -56,6 +58,7 @@ export function showLogin(): Promise<MockIdentity> {
   const oauthLabel = oauthButton?.querySelector<HTMLElement>('strong')
   const oauthDetail = oauthButton?.querySelector<HTMLElement>('small')
   const status = root.querySelector<HTMLElement>('.login-status')
+  let resolveLogin: ((identity: MockIdentity) => void) | undefined
   void fetch(`${API}/api/oauth/status`, {
     credentials: 'include',
     signal: AbortSignal.timeout(5000),
@@ -76,6 +79,14 @@ export function showLogin(): Promise<MockIdentity> {
       if (status) status.textContent = oauth.integrationReady
         ? '认证后将返回知我境。'
         : '知乎认证服务尚未启用，请稍后再试。'
+      if (oauth.authorized) {
+        const user = oauth.user
+        const identity: MockIdentity = user
+          ? { id: user.id, name: user.name, tagline: user.profile?.interests?.join('、') || '知乎用户' }
+          : selectedIdentity
+        setActiveIdentity(identity)
+        resolveLogin?.(identity)
+      }
     })
     .catch(() => {
       if (oauthLabel) oauthLabel.textContent = '知乎登录暂不可用'
@@ -84,6 +95,7 @@ export function showLogin(): Promise<MockIdentity> {
     })
 
   return new Promise(resolve => {
+    resolveLogin = resolve
     oauthButton?.addEventListener('click', () => {
       if (oauthButton.disabled) return
       window.location.assign(`${API}/api/oauth/start`)

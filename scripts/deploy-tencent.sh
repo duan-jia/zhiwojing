@@ -93,10 +93,18 @@ install -d -m 755 "${public_root}"
 cp -a "${web_root}/." "${public_root}/"
 web_root="${public_root}"
 
-echo "配置线上 OAuth（密钥不会写入仓库）。已保存的值直接回车即可保留。"
+echo "配置线上模型与 OAuth（密钥不会写入仓库）。已保存的值直接回车即可保留。"
+llm_api_key="$(env_value LLM_API_KEY)"
 app_id="$(env_value ZHIHU_OAUTH_APP_ID)"
 app_key="$(env_value ZHIHU_OAUTH_APP_KEY)"
 access_secret="$(env_value ZHIHU_ACCESS_SECRET)"
+if [[ -n "${llm_api_key}" ]]; then
+  read -r -s -p "模型 API Key [已保存，回车保留；输入不会显示]: " new_llm_api_key; echo
+  [[ -n "${new_llm_api_key}" ]] && llm_api_key="${new_llm_api_key}"
+else
+  read -r -s -p "模型 API Key（必填，输入不会显示）: " llm_api_key; echo
+fi
+[[ -n "${llm_api_key}" ]] || { echo "模型 API Key 不能为空，无法启动大模型服务。" >&2; exit 1; }
 if [[ -n "${app_id}" ]]; then
   read -r -p "知乎 App ID [已保存，回车保留]: " new_app_id
   [[ -n "${new_app_id}" ]] && app_id="${new_app_id}"
@@ -117,6 +125,7 @@ else
 fi
 
 cat > "${env_file}" <<EOF
+LLM_API_KEY=${llm_api_key}
 ZHIHU_OAUTH_APP_ID=${app_id}
 ZHIHU_OAUTH_REDIRECT_URI=https://${domain}/auth/callback
 ZHIHU_OAUTH_APP_KEY=${app_key}

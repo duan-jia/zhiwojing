@@ -1,4 +1,4 @@
-export type AvatarId = 1 | 2 | 3
+export type AvatarId = number
 
 export interface MockIdentity {
   id: AvatarId
