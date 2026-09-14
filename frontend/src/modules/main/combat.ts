@@ -57,7 +57,34 @@ export const actionBattleOptions = {
   preset: 'classic' as const,
   animations: combatAnimations,
   combat: {
-    player: { combo: false, chargedAttack: false, dodge: false, guard: false, softTargeting: false },
+    player: {
+      combo: {
+        enabled: true,
+        bufferMs: 140,
+        resetMs: 700,
+        steps: [
+          { id: 'combo-1', startupMs: 55, activeMs: 90, recoveryMs: 120, damageMultiplier: .85, knockbackMultiplier: .7 },
+          { id: 'combo-2', startupMs: 45, activeMs: 95, recoveryMs: 130, damageMultiplier: 1, knockbackMultiplier: .85 },
+          { id: 'combo-3', startupMs: 90, activeMs: 120, recoveryMs: 240, damageMultiplier: 1.35, knockbackMultiplier: 1.4 },
+        ],
+      },
+      dodge: { enabled: true, durationMs: 180, invincibilityMs: 220, cooldownMs: 650, additionalSpeed: 8 },
+      guard: {
+        enabled: true, control: 'f', parryWindowMs: 140, guardArcDegrees: 120,
+        guardDamageReduction: .65, guardKnockbackReduction: .6, staggerMs: 650,
+        counterWindowMs: 700, counterDamageMultiplier: 1.5, counterStaggerMultiplier: 1.5,
+      },
+      chargedAttack: {
+        enabled: true, control: 'k', minChargeMs: 300, maxChargeMs: 900,
+        minDamageMultiplier: 1.5, maxDamageMultiplier: 2.4,
+        minKnockbackMultiplier: 1.6, maxKnockbackMultiplier: 2.3,
+        profile: { id: 'charged', startupMs: 100, activeMs: 140, recoveryMs: 380 },
+      },
+      softTargeting: {
+        enabled: true, range: 112, coneDegrees: 110, directionWeight: .48,
+        distanceWeight: .32, threatWeight: .2, indicatorDurationMs: 220,
+      },
+    },
     targets: {
       canTarget: ({ attacker, target }: any) => canTargetCombatPlayer(attacker, target),
     },
@@ -70,11 +97,26 @@ export const actionBattleOptions = {
     },
   },
   attack: {
-    profile: { damageMultiplier: 1, reaction: { invincibilityMs: 400, hitstunMs: 150, staggerPower: 1 } },
+    lockMovement: true,
+    profile: {
+      damageMultiplier: 1,
+      control: {
+        movementLock: 'active' as const,
+        directionLock: 'active' as const,
+        moveCancelsRecovery: true,
+        dodgeCancelsRecovery: true,
+        inputBufferMs: 160,
+      },
+      reaction: { invincibilityMs: 400, hitstunMs: 150, staggerPower: 1 },
+    },
   },
   ai: { director: false as const },
   skills: { defaultAoeMask: ['#'] },
   targeting: { affects: 'both' as const, allowEmptyTarget: true },
   ui: { hotbar: { enabled: false, autoOpen: false }, actionBar: { enabled: false }, targeting: { enabled: false } },
-  feedback: { hitStop: true, flashes: true, screenShake: true, damageNumbers: true },
+  visual: 'impact' as const,
+  feedback: {
+    hitStop: true, hitStopMs: 32, heavyHitStopMs: 52, parryHitStopMs: 68,
+    flashes: true, screenShake: true, damageNumbers: true,
+  },
 }

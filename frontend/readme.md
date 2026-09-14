@@ -61,3 +61,10 @@ npm run test:production
 `VITE_CAMERA_ZOOM=1.5 npm run dev`。此项只改变镜头，不改变 32×32 角色或地图坐标。
 地图源需要调整时运行 `npm run build:map`，并同步修改 `landmarks.ts`、服务端事件和
 `modules/main/autonomy.ts` 中的地点。
+# 战斗操作
+
+- `J`：普攻；700ms 内连续输入可打出三段连击。
+- `Shift`：短距闪避（含短暂无敌帧）。
+- 按住 `F`：正面格挡；起手瞬间可招架并强化下一次反击。
+- 按住 `K`、松开：蓄力攻击（300–900ms）。`E` 保留给地标互动。
+- 输入框或可编辑面板聚焦时不会触发上述战斗按键。

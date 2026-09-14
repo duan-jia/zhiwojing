@@ -14,7 +14,8 @@
     "test:chat": "node --test test/agent-chat.test.mjs test/autonomy.test.mjs test/autonomy-logic.test.mjs test/contacts-logic.test.mjs",
     "test:production": "node --test test/production-preview.test.mjs",
     "test:e2e": "npm run build && playwright test test/e2e/autonomy.spec.mjs --workers=1",
-    "server": "node dist/server/node-server.js"
+    "server": "node dist/server/node-server.js",
+    "test:e2e:combat": "npm run build && playwright test test/e2e/combat.spec.mjs --workers=1"
   },
   "keywords": [],
   "author": "",

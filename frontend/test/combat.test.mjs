@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { applyCombatDamage, applyFixedDamage, canTargetCombatPlayer, isDefeated, restoreCombatPlayer, shouldAutoRespawn } from '../src/combat-state.ts'
 import { isAttackKey, processCombatKey } from '../src/combat-input-logic.ts'
-import { normalizeHp } from '../src/combat-hud-logic.ts'
+import { healthTone, interpolateHealth, normalizeHp } from '../src/combat-hud-logic.ts'
 import { COMBAT_ANIMATION_KEYS, combatAnimations, resolveCombatAnimation, withCombatAnimationAliases } from '../src/combat-animation-logic.ts'
 import { remotePlayerHealthView } from '../src/combat-hud-logic.ts'
 
@@ -70,11 +71,32 @@ test('HUD values clamp to the configured range', () => {
   assert.deepEqual(normalizeHp(-5), { current: 0, max: 100, percent: 0 })
 })
 
+test('v2 action battle timings and controls remain explicit', () => {
+  const source = readFileSync(new URL('../src/modules/main/combat.ts', import.meta.url), 'utf8')
+  for (const expected of [
+    'resetMs: 700', "control: 'f'", 'parryWindowMs: 140', 'guardArcDegrees: 120',
+    'guardDamageReduction: .65', "control: 'k'", 'minChargeMs: 300', 'maxChargeMs: 900',
+    'range: 112', 'coneDegrees: 110', "visual: 'impact'", 'hitStopMs: 32',
+    'heavyHitStopMs: 52', 'parryHitStopMs: 68', 'inputBufferMs: 160',
+    "movementLock: 'active'", "directionLock: 'active'", 'moveCancelsRecovery: true', 'dodgeCancelsRecovery: true',
+  ]) assert.ok(source.includes(expected), expected)
+  for (const multiplier of ['damageMultiplier: .85', 'damageMultiplier: 1,', 'damageMultiplier: 1.35']) assert.ok(source.includes(multiplier))
+})
+
+test('health presentation exposes low states and smooth damage interpolation', () => {
+  assert.equal(healthTone(31), 'healthy')
+  assert.equal(healthTone(30), 'low')
+  assert.equal(healthTone(15), 'critical')
+  assert.equal(healthTone(0), 'defeated')
+  assert.equal(interpolateHealth(100, 50), 86)
+  assert.equal(interpolateHealth(20, 100), 100)
+})
+
 test('all Action Battle animation keys explicitly avoid missing RMSpritesheet frames', () => {
-  assert.equal(resolveCombatAnimation('attack'), 'stand')
+  assert.deepEqual(resolveCombatAnimation('attack'), { animationName: 'walk', graphic: 'liukanshan-sword-slash' })
   assert.deepEqual(Object.keys(combatAnimations), [...COMBAT_ANIMATION_KEYS])
   for (const key of COMBAT_ANIMATION_KEYS) {
-    assert.ok(combatAnimations[key] === 'stand' || combatAnimations[key] === null)
+    assert.ok(key === 'attack' ? combatAnimations[key]?.animationName === 'walk' : combatAnimations[key] === null)
   }
   const stand = { animations: () => [] }
   const safeSheet = withCombatAnimationAliases({ textures: { stand, walk: {} } })
@@ -82,6 +104,6 @@ test('all Action Battle animation keys explicitly avoid missing RMSpritesheet fr
 })
 
 test('remote health labels normalize live and defeated player state', () => {
-  assert.deepEqual(remotePlayerHealthView(75, false), { current: 75, max: 100, percent: 75, isDown: false, label: '75/100' })
-  assert.deepEqual(remotePlayerHealthView(-1, false), { current: 0, max: 100, percent: 0, isDown: true, label: '倒地 · 0/100' })
+  assert.deepEqual(remotePlayerHealthView(75, false), { current: 75, max: 100, percent: 75, isDown: false, tone: 'healthy', label: '75/100' })
+  assert.deepEqual(remotePlayerHealthView(-1, false), { current: 0, max: 100, percent: 0, isDown: true, tone: 'defeated', label: '倒地 · 0/100' })
 })
