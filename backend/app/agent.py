@@ -33,6 +33,8 @@ OWNER_TOOLS = READ_ONLY_TOOLS + (
 
 DEFAULT_LLM_MODEL = "deepseek-v4-flash"
 DEFAULT_LLM_BASE_URL = "https://api.openai-next.com/v1"
+DEFAULT_LLM_TIMEOUT_SECONDS = 4.0
+DEFAULT_CHAT_TIMEOUT_SECONDS = 20.0
 
 
 class AgentRuntimeError(Exception):
@@ -58,15 +60,25 @@ def resolve_llm_api_key() -> str:
 
     config_home = os.getenv("XDG_CONFIG_HOME")
     config_dir = Path(config_home).expanduser() if config_home else Path.home() / ".config"
-    secret_file = config_dir / "zhiwojing" / "llm-api-key"
-    try:
-        local_key = secret_file.read_text(encoding="utf-8").strip()
-    except OSError:
-        return "not-configured"
-    return local_key or "not-configured"
+    secret_dir = config_dir / "zhiwojing"
+    # `secrets.env` is the documented local configuration and is loaded by
+    # run-local.sh; read it here too so direct uvicorn launches behave the same.
+    for secret_file in (secret_dir / "secrets.env", secret_dir / "llm-api-key"):
+        try:
+            contents = secret_file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if secret_file.name == "secrets.env":
+            for line in contents.splitlines():
+                key, separator, value = line.partition("=")
+                if separator and key.strip() == "LLM_API_KEY" and value.strip():
+                    return value.strip().strip('"').strip("'")
+        elif contents.strip():
+            return contents.strip()
+    return "not-configured"
 
 
-def create_llm() -> ChatOpenAI:
+def create_llm(*, timeout_seconds: float | None = None) -> ChatOpenAI:
     """Create the OpenAI-compatible client used by avatar agents."""
     api_key = resolve_llm_api_key()
     if api_key == "not-configured":
@@ -76,12 +88,15 @@ def create_llm() -> ChatOpenAI:
             "模型服务尚未配置，分身将使用本地巡游。",
             retryable=False,
         )
+    timeout = timeout_seconds
+    if timeout is None:
+        timeout = float(os.getenv("LLM_TIMEOUT_SECONDS", str(DEFAULT_LLM_TIMEOUT_SECONDS)))
     return ChatOpenAI(
         model=os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL),
         base_url=os.getenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL),
         api_key=api_key,
         temperature=float(os.getenv("LLM_TEMPERATURE", "0.4")),
-        timeout=4.0,
+        timeout=timeout,
         max_retries=0,
     )
 
@@ -144,9 +159,14 @@ class AvatarAgentRuntime:
             # Kept for compatibility with the repository's patched contract tests.
             "state_modifier": prompt,
         }
+        chat_timeout = float(
+            os.getenv("LLM_CHAT_TIMEOUT_SECONDS", str(DEFAULT_CHAT_TIMEOUT_SECONDS))
+        )
         try:
             agent = create_react_agent(
-                create_llm(), registry_tools(self.registry, names, user_id=user_id), **arguments
+                create_llm(timeout_seconds=chat_timeout),
+                registry_tools(self.registry, names, user_id=user_id),
+                **arguments,
             )
         except TypeError as error:
             if "state_modifier" not in str(error):
@@ -154,7 +174,9 @@ class AvatarAgentRuntime:
             arguments.pop("state_modifier")
             arguments["prompt"] = prompt
             agent = create_react_agent(
-                create_llm(), registry_tools(self.registry, names, user_id=user_id), **arguments
+                create_llm(timeout_seconds=chat_timeout),
+                registry_tools(self.registry, names, user_id=user_id),
+                **arguments,
             )
         try:
             result = await agent.ainvoke(

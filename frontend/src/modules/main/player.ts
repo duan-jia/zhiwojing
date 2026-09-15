@@ -3,10 +3,10 @@ import type {
     RpgPlayerConnectionContext,
     RpgPlayerHooks,
 } from '@rpgjs/server'
-import { disposeAgent, enableAgent, takeControl, toggleAgent } from './autonomy.ts'
+import { disposeAgent, enableAgent, setAgentDialoguePaused, takeControl, toggleAgent } from './autonomy.ts'
 import { handleAutonomyInput } from './player-input.ts'
-import { clearRespawnTimer, initializeCombatPlayer, revivePlayer } from './combat'
-import { initializeStarterWeapon } from './weapons'
+import { clearRespawnTimer, initializeCombatPlayer, revivePlayer } from './combat.ts'
+import { initializeStarterWeapon } from './weapons.ts'
 
 const profiles = {
     1: { name: '体验用户', graphic: 'liukanshan' },
@@ -92,7 +92,17 @@ export const player: RpgPlayerHooks = {
             if (!openMenu) void player.callMainMenu()
             return
         }
-        handleAutonomyInput(player as any, data, { toggleAgent, takeControl })
+        handleAutonomyInput(player as any, data, {
+            toggleAgent,
+            takeControl,
+            setDialoguePaused: (currentPlayer, avatarId, paused) => {
+                const map = (currentPlayer as any).getCurrentMap?.()
+                const rawEvents = map?.getEvents?.() ?? []
+                const events = Array.isArray(rawEvents) ? rawEvents : Object.values(rawEvents)
+                const target = events.find((event: any) => event?.systemPlayer && Number(event?.avatarId?.()) === avatarId)
+                if (target) setAgentDialoguePaused(target as any, paused)
+            },
+        })
     },
     onLeaveMap(player: RpgPlayer) {
         disposeAgent(player as any)

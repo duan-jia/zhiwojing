@@ -1,6 +1,7 @@
 type AutonomyInputHandlers<Player> = {
     toggleAgent(player: Player): void
     takeControl(player: Player): void
+    setDialoguePaused?(player: Player, avatarId: number, paused: boolean): void
 }
 
 export function handleAutonomyInput<Player>(
@@ -10,6 +11,9 @@ export function handleAutonomyInput<Player>(
 ) {
     const action = String(data?.action ?? data?.input ?? '')
     if (action === 'agentToggle') handlers.toggleAgent(player)
+    else if ((action === 'dialogueOpen' || action === 'dialogueClose') && Number.isInteger(Number(data?.avatar_id))) {
+        handlers.setDialoguePaused?.(player, Number(data.avatar_id), action === 'dialogueOpen')
+    }
     else if (isDelegated(player) && (action === 'takeControl' || ['up', 'down', 'left', 'right'].includes(action) || data?.direction)) {
         handlers.takeControl(player)
     }

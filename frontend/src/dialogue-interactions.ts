@@ -3,6 +3,7 @@ import type { RpgClientEngine } from '@rpgjs/client'
 import {
   closeAvatarChat,
   configureChatLifecycle,
+  getActiveChatAvatarId,
   isChatOpen,
   openAvatarChat,
   toggleSelfAvatarChat,
@@ -80,6 +81,8 @@ export function setupDialogueInteractions(engine: RpgClientEngine): DialogueCont
   const hud = document.querySelector<HTMLElement>('#interaction-hud')
   let currentTarget: DialogueTarget | null = null
   let currentLandmark: LandmarkTarget | null = null
+  let chatTargetObjectId: string | null = null
+  let pausedAvatarId: number | null = null
   let lastScanAt = 0
   let toastTimer: ReturnType<typeof window.setTimeout> | null = null
 
@@ -126,6 +129,8 @@ export function setupDialogueInteractions(engine: RpgClientEngine): DialogueCont
       showHud(missingMessage, true)
       return
     }
+    currentTarget = target
+    chatTargetObjectId = target.objectId
     openAvatarChat(target.avatarId)
   }
 
@@ -134,11 +139,21 @@ export function setupDialogueInteractions(engine: RpgClientEngine): DialogueCont
       clearToast()
       if (isLandmarkPanelOpen()) closeLandmarkPanel()
       engine.interruptCurrentPlayerMovement()
+      const target = currentTarget
+      if (target?.kind === 'player' && target.objectId === chatTargetObjectId && target.avatarId === getActiveChatAvatarId()) {
+        pausedAvatarId = target.avatarId
+        engine.processAction({ action: 'dialogueOpen', avatar_id: target.avatarId } as any)
+      }
       engine.stopProcessingInput = true
       updateHud()
     },
     onClose: () => {
       engine.stopProcessingInput = false
+      if (pausedAvatarId !== null) {
+        engine.processAction({ action: 'dialogueClose', avatar_id: pausedAvatarId } as any)
+        pausedAvatarId = null
+      }
+      chatTargetObjectId = null
       scan()
     },
   })
@@ -188,6 +203,7 @@ export function setupDialogueInteractions(engine: RpgClientEngine): DialogueCont
     const key = event.key.toLowerCase()
     if (key === 'b') {
       event.preventDefault()
+      chatTargetObjectId = null
       toggleSelfAvatarChat()
       return
     }

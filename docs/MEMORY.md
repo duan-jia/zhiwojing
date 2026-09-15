@@ -32,6 +32,8 @@
 
 OpenAI embedding 与摘要复用 `LLM_BASE_URL`/`LLM_API_KEY`。任何记忆初始化或运行时读写错误都会记录日志并降级，chat/step 的主要响应不被阻断。LangGraph checkpoint 使用目录内 SQLite，conversation_id 跨重启延续。
 
+Qdrant 集合名按 embedding provider 与模型生成；切换不同向量维度的模型时会创建独立集合并保留旧集合，避免新旧向量混用导致检索失败。
+
 Mem0 及本地 embedding 的原生依赖采用惰性导入：即使未安装 `mem0ai`、`fastembed` 或 `onnxruntime`，关闭记忆或初始化失败时 API 仍可启动并维持无长期记忆的原行为。生产安装仍通过 `requirements.txt` 的固定版本获得完整能力。
 
 为保持 LangGraph 0.2 系列兼容性，相关依赖固定为 `langgraph==0.2.60`、`langchain-openai==0.2.14` 与 `langgraph-checkpoint-sqlite==2.0.11`（后者要求 `langgraph-checkpoint>=2.0.21,<3.0.0`）。记忆依赖继续固定为 `mem0ai==2.0.20`、`fastembed==0.8.0`、`onnxruntime==1.30.0`。

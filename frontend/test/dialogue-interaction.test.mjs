@@ -12,10 +12,10 @@ async function loadTypeScriptModule(relativePath) {
   let source = await readFile(path, 'utf8')
   if (relativePath.endsWith('player.ts')) {
     source = source
-      .replace(/import \{ disposeAgent, enableAgent, takeControl, toggleAgent \} from '.\/autonomy\.ts'/, 'const disposeAgent=()=>{}; const enableAgent=()=>{}; const takeControl=()=>{}; const toggleAgent=()=>{}')
+      .replace(/import \{ disposeAgent, enableAgent, setAgentDialoguePaused, takeControl, toggleAgent \} from '.\/autonomy\.ts'/, 'const disposeAgent=()=>{}; const enableAgent=()=>{}; const setAgentDialoguePaused=()=>{}; const takeControl=()=>{}; const toggleAgent=()=>{}')
       .replace(/import \{ handleAutonomyInput \} from '.\/player-input\.ts'/, 'const handleAutonomyInput=()=>{}')
-      .replace(/import \{ clearRespawnTimer, initializeCombatPlayer, revivePlayer \} from '.\/combat'/, 'const clearRespawnTimer=()=>{}; const initializeCombatPlayer=()=>{}; const revivePlayer=player=>{player.reviveCalls=(player.reviveCalls||0)+1}')
-      .replace(/import \{ initializeStarterWeapon \} from '.\/weapons'/, 'const initializeStarterWeapon=()=>{}')
+      .replace(/import \{ clearRespawnTimer, initializeCombatPlayer, revivePlayer \} from '.\/combat(?:\.ts)?'/, 'const clearRespawnTimer=()=>{}; const initializeCombatPlayer=()=>{}; const revivePlayer=player=>{player.reviveCalls=(player.reviveCalls||0)+1}')
+      .replace(/import \{ initializeStarterWeapon \} from '.\/weapons(?:\.ts)?'/, 'const initializeStarterWeapon=()=>{}')
   }
   const result = await transformWithOxc(source, path)
   const url = `data:text/javascript;base64,${Buffer.from(result.code).toString('base64')}`
@@ -129,6 +129,10 @@ test('client integration wires B, E, click, HUD, and movement locking', async ()
     readFile(join(projectRoot, 'src', 'dialogue-interactions.ts'), 'utf8'),
     readFile(join(projectRoot, 'src', 'chat.ts'), 'utf8')
   ])
+  const openLifecycle = interactions.match(/onOpen: \(\) => \{[\s\S]*?updateHud\(\)/)?.[0] ?? ''
+  const closeLifecycle = interactions.match(/onClose: \(\) => \{[\s\S]*?scan\(\)/)?.[0] ?? ''
+  assert.ok(openLifecycle.indexOf("action: 'dialogueOpen'") < openLifecycle.indexOf('stopProcessingInput = true'))
+  assert.ok(closeLifecycle.indexOf('stopProcessingInput = false') < closeLifecycle.indexOf("action: 'dialogueClose'"))
   assert.match(html, /id="interaction-hud"/)
   assert.match(interactions, /key === 'b'/)
   assert.match(interactions, /key === 'e'/)

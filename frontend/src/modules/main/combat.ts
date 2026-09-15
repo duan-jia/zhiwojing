@@ -1,8 +1,8 @@
 import type { RpgPlayer } from '@rpgjs/server'
 import { setActionBattleInvincibility } from '@rpgjs/action-battle/server'
-import { AUTONOMOUS_RESPAWN_MS, PLAYER_ATTACK_DAMAGE, PLAYER_MAX_HP, RESPAWN_INVINCIBILITY_MS, applyCombatDamage, canTargetCombatPlayer, isDefeated, restoreCombatPlayer, shouldAutoRespawn, showCombatDeath } from '../../combat-state'
-import { pauseAgent, resumeAgent } from './autonomy'
-import { combatAnimations } from '../../combat-animation-logic'
+import { AUTONOMOUS_RESPAWN_MS, PLAYER_ATTACK_DAMAGE, PLAYER_MAX_HP, RESPAWN_INVINCIBILITY_MS, applyCombatDamage, canTargetCombatPlayer, isDefeated, restoreCombatPlayer, shouldAutoRespawn, showCombatDeath } from '../../combat-state.ts'
+import { pauseAgent, resumeAgent } from './autonomy.ts'
+import { combatAnimations } from '../../combat-animation-logic.ts'
 
 const respawnTimers = new Map<string, ReturnType<typeof setTimeout>>()
 

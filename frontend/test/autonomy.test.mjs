@@ -21,6 +21,41 @@ test('minimal G delegation starts with the hot-square target', () => {
   assert.match(autonomy, /observeArrival/)
 })
 
+test('system players skip protected model calls when no internal token is configured', async () => {
+  const { canUseAgentApi } = await import('../src/modules/main/autonomy.ts')
+  assert.equal(canUseAgentApi({ systemPlayer: true }, ''), false)
+  assert.equal(canUseAgentApi({ systemPlayer: true }, 'internal-token'), true)
+  assert.equal(canUseAgentApi({ systemPlayer: false }, ''), true)
+})
+
+test('dialogue pause cancels NPC pathing and resumes the interrupted destination', async () => {
+  const { disposeAgent, enableAgent, setAgentDialoguePaused } = await import('../src/modules/main/autonomy.ts')
+  const signal = initial => {
+    let current = initial
+    return Object.assign(() => current, { set: value => { current = value } })
+  }
+  const moves = []
+  let stops = 0
+  const player = {
+    id: 'dialogue-npc', name: 'NPC', systemPlayer: true,
+    avatarId: signal(2), agentMode: signal(true), agentState: signal('agent'),
+    agentSpeech: signal(''), dialoguePaused: signal(false), position: { x: 0, y: 0 },
+    getCurrentMap: () => ({ getBody: () => ({ position: { x: 0, y: 0 } }), getPlayers: () => [] }),
+    moveTo: target => moves.push(target), stopMoveTo: () => { stops += 1 },
+  }
+  enableAgent(player)
+  const baselineStops = stops
+  setAgentDialoguePaused(player, true)
+  assert.equal(player.dialoguePaused(), true)
+  assert.equal(stops, baselineStops + 1)
+  assert.equal(moves.length, 1)
+  setAgentDialoguePaused(player, false)
+  assert.equal(player.dialoguePaused(), false)
+  assert.equal(moves.length, 2)
+  assert.deepEqual(moves[1], moves[0])
+  disposeAgent(player)
+})
+
 function controlledPlayer() {
   let agentMode = true
   let stops = 0

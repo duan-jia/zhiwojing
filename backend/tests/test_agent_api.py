@@ -9,6 +9,7 @@ from langchain_core.messages import AIMessage
 
 from app.agent import (
     AgentRuntimeError,
+    DEFAULT_CHAT_TIMEOUT_SECONDS,
     DEFAULT_LLM_BASE_URL,
     DEFAULT_LLM_MODEL,
     OWNER_TOOLS,
@@ -159,7 +160,7 @@ class AgentToolBoundaryTests(unittest.IsolatedAsyncioTestCase):
             return FakeGraph()
 
         runtime = AvatarAgentRuntime(object())
-        with patch("app.agent.create_llm", return_value=object()), patch(
+        with patch("app.agent.create_llm", return_value=object()) as create_model, patch(
             "app.agent.registry_tools",
             side_effect=lambda registry, names, user_id: [
                 type("NamedTool", (), {"name": name})() for name in names
@@ -175,6 +176,7 @@ class AgentToolBoundaryTests(unittest.IsolatedAsyncioTestCase):
                 interests="阅读、旅行",
                 style="温柔、细腻",
             )
+        create_model.assert_called_once_with(timeout_seconds=DEFAULT_CHAT_TIMEOUT_SECONDS)
         self.assertEqual(reply, "人物口吻回复")
         self.assertIn("苏晚", captured["prompt"])
         self.assertIn("温柔、细腻", captured["prompt"])

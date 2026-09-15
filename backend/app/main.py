@@ -494,9 +494,11 @@ def _build_agent_runtime():
         config.data_dir.mkdir(parents=True, exist_ok=True)
         backend = build_mem0(config)
         service = MemoryService(backend, communication_store)
-        from langgraph.checkpoint.sqlite import SqliteSaver
-        connection = sqlite3.connect(config.data_dir / "checkpoints.sqlite", check_same_thread=False)
-        return AvatarAgentRuntime(tool_registry, memory_service=service, checkpointer=SqliteSaver(connection))
+        # `ainvoke()` requires an async checkpointer.  The synchronous
+        # SqliteSaver raises at runtime; use the safe in-process saver until
+        # AsyncSqliteSaver is wired into the application lifespan.
+        logging.getLogger(__name__).warning("using in-memory agent checkpoints; async SQLite saver is not configured")
+        return AvatarAgentRuntime(tool_registry, memory_service=service)
     except Exception:
         logging.getLogger(__name__).exception("memory initialization failed; continuing without memory")
         return AvatarAgentRuntime(tool_registry, memory_service=MemoryService(None, communication_store))

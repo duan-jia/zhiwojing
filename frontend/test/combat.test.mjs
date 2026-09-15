@@ -93,10 +93,13 @@ test('HUD values clamp to the configured range', () => {
   assert.deepEqual(normalizeHp(-5), { current: 0, max: 100, percent: 0 })
 })
 
-test('all Action Battle animation keys explicitly avoid missing RMSpritesheet frames', () => {
-  assert.equal(resolveCombatAnimation('attack'), 'stand')
+test('Action Battle uses the sword slash sheet and avoids missing RMSpritesheet frames', () => {
+  assert.deepEqual(resolveCombatAnimation('attack'), {
+    animationName: 'walk',
+    graphic: 'liukanshan-sword-slash',
+  })
   assert.deepEqual(Object.keys(combatAnimations), [...COMBAT_ANIMATION_KEYS])
-  for (const key of COMBAT_ANIMATION_KEYS) {
+  for (const key of COMBAT_ANIMATION_KEYS.filter(key => key !== 'attack')) {
     assert.ok(combatAnimations[key] === 'stand' || combatAnimations[key] === null)
   }
   const stand = { animations: () => [] }

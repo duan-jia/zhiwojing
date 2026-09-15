@@ -17,7 +17,7 @@ class MemoryService:
     def __init__(self,backend,store,enabled=True,max_chars=1200): self.backend=backend; self.store=store; self.enabled=enabled and backend is not None; self.max_chars=max_chars; self._owner_turns={}
     def _search(self,query,scope,limit=5):
         if not self.enabled:return []
-        try:return [_text(x) for x in _rows(self.backend.search(query,user_id=scope,limit=limit)) if _text(x)]
+        try:return [_text(x) for x in _rows(self.backend.search(query,filters={"user_id":scope},top_k=limit)) if _text(x)]
         except Exception: log.exception("memory search failed"); return []
     def context_for_chat(self,user_id:int,avatar_id:int,query:str)->str:
         if not self.enabled:return ""

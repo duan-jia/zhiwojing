@@ -37,6 +37,7 @@ export function systemPlayerEvent(avatarId: number, name: string, graphic: strin
           agentMode: { $default: true, $syncWithClient: true, $permanent: false },
           agentSpeech: { $default: '', $syncWithClient: true, $permanent: false },
           agentState: { $default: 'agent', $syncWithClient: true, $permanent: false },
+          dialoguePaused: { $default: false, $syncWithClient: true, $permanent: false },
           defeated: { $default: false, $syncWithClient: true, $permanent: false },
         })
         this.avatarId.set(avatarId)
@@ -55,6 +56,7 @@ export function systemPlayerEvent(avatarId: number, name: string, graphic: strin
 const MEETING_DISTANCE = 2
 const MAX_MODEL_CONCURRENCY = 3
 const API_URL = (typeof process !== 'undefined' && process.env.AVATAR_API_URL) || 'http://127.0.0.1:8000'
+const SYSTEM_AGENT_TOKEN = (typeof process !== 'undefined' && process.env.SYSTEM_AGENT_TOKEN) || ''
 
 type AgentLocation = (typeof AGENT_LOCATIONS)[number]
 type AgentAction =
@@ -69,6 +71,7 @@ export type AgentActor = RpgPlayer & {
   agentMode: Signal<boolean>
   agentSpeech: Signal<string>
   agentState: Signal<AgentState>
+  dialoguePaused?: Signal<boolean>
   systemPlayer?: boolean
 }
 type State = {
@@ -102,6 +105,15 @@ function value<T>(signal: (() => T) | T): T {
 function defeated(player: AgentActor) {
   const prop = (player as any).defeated
   return Boolean(typeof prop === 'function' ? prop() : prop)
+}
+
+function dialoguePaused(player: AgentActor): boolean {
+  const prop = player.dialoguePaused as any
+  return Boolean(prop && (typeof prop === 'function' ? prop() : prop))
+}
+
+export function canUseAgentApi(player: Pick<AgentActor, 'systemPlayer'>, systemToken = SYSTEM_AGENT_TOKEN): boolean {
+  return !player.systemPlayer || Boolean(systemToken)
 }
 
 function reportPresence(player: AgentActor, humanControlled: boolean) {
@@ -160,7 +172,7 @@ function acquireModelSlot(signal: AbortSignal): Promise<() => void> {
 
 async function post<T>(player: AgentActor, path: string, body: object, signal: AbortSignal): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
-    method: 'POST', headers: { 'content-type': 'application/json', ...(player.authToken ? { authorization: `Bearer ${player.authToken}` } : {}), ...(player.systemPlayer ? { 'x-system-agent-token': (typeof process !== 'undefined' && process.env.SYSTEM_AGENT_TOKEN) || '' } : {}) }, body: JSON.stringify(body), signal,
+    method: 'POST', headers: { 'content-type': 'application/json', ...(player.authToken ? { authorization: `Bearer ${player.authToken}` } : {}), ...(player.systemPlayer && SYSTEM_AGENT_TOKEN ? { 'x-system-agent-token': SYSTEM_AGENT_TOKEN } : {}) }, body: JSON.stringify(body), signal,
   })
   if (!response.ok) throw new Error(`avatar API ${response.status}`)
   return response.json() as Promise<T>
@@ -237,7 +249,7 @@ function observeArrival(player: AgentActor, generation: number) {
 
 function startNextLeg(player: AgentActor, generation: number) {
   const state = currentState(player, generation)
-  if (!state || state.moving || !value(player.agentMode) || defeated(player)) return
+  if (!state || state.moving || dialoguePaused(player) || !value(player.agentMode) || defeated(player)) return
   const target = state.pendingIntent ?? chooseLocation(AGENT_LOCATIONS, [state.currentTarget?.id, state.previousTargetId])
   state.pendingIntent = undefined
   if (!target) return
@@ -271,7 +283,7 @@ function scheduleModelRetry(player: AgentActor, generation: number, delay: numbe
 
 async function refreshIntent(player: AgentActor, generation: number) {
   const state = currentState(player, generation)
-  if (!state || state.requestAbort || !value(player.agentMode) || defeated(player) || Date.now() < state.nextModelAt) return
+  if (!state || state.requestAbort || dialoguePaused(player) || !canUseAgentApi(player) || !value(player.agentMode) || defeated(player) || Date.now() < state.nextModelAt) return
   const controller = new AbortController()
   state.requestAbort = controller
   state.nextModelAt = Date.now() + MODEL_REFRESH_MS
@@ -335,10 +347,10 @@ async function startMeeting(player: AgentActor, other: AgentActor, generation: n
 
 function scheduleMeetingCheck(player: AgentActor, generation: number) {
   const state = currentState(player, generation)
-  if (!state || !value(player.agentMode) || defeated(player)) return
+  if (!state || dialoguePaused(player) || !canUseAgentApi(player) || !value(player.agentMode) || defeated(player)) return
   state.meetingTimer = setTimeout(() => {
     const active = currentState(player, generation)
-    if (!active || !value(player.agentMode) || defeated(player)) return
+    if (!active || dialoguePaused(player) || !value(player.agentMode) || defeated(player)) return
     active.meetingTimer = undefined
     const encounter = nearby(player)[0]
     if (encounter) {
@@ -356,7 +368,7 @@ function scheduleMeetingCheck(player: AgentActor, generation: number) {
 export function enableAgent(player: AgentActor) {
   disposeAgent(player)
   player.agentMode.set(true)
-  player.agentState.set('agent')
+  player.agentState.set(canUseAgentApi(player) ? 'agent' : 'degraded')
   if (!player.systemPlayer) reportPresence(player, false)
   const state: State = {
     generation: Date.now() + Math.random(), moving: false, nextModelAt: 0, failures: 0,
@@ -367,6 +379,30 @@ export function enableAgent(player: AgentActor) {
   startNextLeg(player, state.generation)
   void refreshIntent(player, state.generation)
   scheduleMeetingCheck(player, state.generation)
+}
+
+/** Freeze or resume a system player's autonomous behavior while a dialogue is open. */
+export function setAgentDialoguePaused(player: AgentActor, paused: boolean): void {
+  if (!player.systemPlayer || !player.dialoguePaused) return
+  player.dialoguePaused.set(paused)
+  const state = states.get(playerId(player))
+  if (!state) return
+  if (paused) {
+    state.arrivalTimer && clearTimeout(state.arrivalTimer)
+    state.dwellTimer && clearTimeout(state.dwellTimer)
+    state.modelTimer && clearTimeout(state.modelTimer)
+    state.meetingTimer && clearTimeout(state.meetingTimer)
+    state.requestAbort?.abort(new Error('dialogue opened'))
+    state.pendingIntent = state.currentTarget ?? state.pendingIntent
+    state.currentTarget = undefined
+    state.moving = false
+    state.moveStartedAt = undefined
+    player.stopMoveTo()
+  } else {
+    startNextLeg(player, state.generation)
+    scheduleMeetingCheck(player, state.generation)
+    void refreshIntent(player, state.generation)
+  }
 }
 
 export function disposeAgent(player: AgentActor) {

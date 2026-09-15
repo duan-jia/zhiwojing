@@ -66,7 +66,7 @@ wait_http() {
 pids+=("$!"); names+=("FastAPI")
 (cd "${frontend_dir}" && exec npm run server) &
 pids+=("$!"); names+=("RPGJS world")
-(cd "${frontend_dir}" && exec npm run dev) &
+(cd "${frontend_dir}" && exec npm run dev -- --strictPort) &
 pids+=("$!"); names+=("Vite")
 
 echo "本地服务启动中：Web 5173 · API 8000 · World 8001"

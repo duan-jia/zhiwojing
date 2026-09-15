@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 from sqlmodel import Session, SQLModel, create_engine, select
 from app.memory.config import MemoryConfig
+from app.memory.backend import collection_name, embedding_dimensions
 from app.memory.scopes import pair_scope, private_scope, scopes_for_chat
 from app.memory.service import MemoryService
 from app.memory.store import Episode, Relationship, StructuredStore
@@ -14,11 +15,11 @@ from app.memory.summarize import parse_json_object
 class FakeBackend:
     def __init__(self): self.items=[]
     def add(self,messages,*,user_id,metadata=None,infer=True): self.items.append({"memory":str(messages),"user_id":user_id,"metadata":metadata,"infer":infer})
-    def search(self,query,*,user_id,limit=5): return [x for x in self.items if x["user_id"]==user_id][:limit]
-    def get_all(self,*,user_id): return self.search("",user_id=user_id)
+    def search(self,query,*,filters,top_k=5): return [x for x in self.items if x["user_id"]==filters["user_id"]][:top_k]
+    def get_all(self,*,filters,top_k=20): return self.search("",filters=filters,top_k=top_k)
 
 class FailingBackend(FakeBackend):
-    def search(self,query,*,user_id,limit=5): raise RuntimeError("vector store offline")
+    def search(self,query,*,filters,top_k=5): raise RuntimeError("vector store offline")
 class Reply:
     def __init__(self,content): self.content=content
 class LLM:
@@ -33,6 +34,11 @@ class MemoryTests(unittest.IsolatedAsyncioTestCase):
     def test_scopes_are_canonical(self):
         self.assertEqual(pair_scope(9,2),"pair:2-9"); self.assertEqual(private_scope(2),"avatar:2")
         self.assertEqual(scopes_for_chat(2,2),("avatar:2","pair:2-2"))
+    def test_vector_collection_is_scoped_to_the_embedding_model(self):
+        local = collection_name("fastembed", "BAAI/bge-small-zh-v1.5", 512)
+        self.assertEqual(local, collection_name("fastembed", "BAAI/bge-small-zh-v1.5", 512))
+        self.assertNotEqual(local, collection_name("openai", "text-embedding-3-small", 1536))
+        self.assertEqual(embedding_dimensions(MemoryConfig(True, Path("."), "fastembed", "BAAI/bge-small-zh-v1.5")), 512)
     def test_private_and_pair_isolation(self):
         self.backend.add("A secret",user_id="avatar:1"); self.backend.add("shared",user_id="pair:1-2")
         self.assertNotIn("secret",self.service.context_for_chat(2,1,"x"))

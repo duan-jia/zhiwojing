@@ -3,7 +3,7 @@ import { provideMain } from "./modules/main/index.ts";
 import { provideSaveStorage } from "@rpgjs/server";
 import { provideTiledMap } from "@rpgjs/tiledmap/server";
 import { provideActionBattle } from '@rpgjs/action-battle/server'
-import { actionBattleOptions } from './modules/main/combat'
+import { actionBattleOptions } from './modules/main/combat.ts'
 
 export default createServer({
     providers: [
