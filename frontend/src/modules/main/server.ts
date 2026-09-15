@@ -1,8 +1,9 @@
 import { defineModule } from "@rpgjs/common";
-import { Move, RpgServer } from "@rpgjs/server";
+import { RpgServer } from "@rpgjs/server";
 import { player } from './player.ts'
 import { TOWN_BUILDINGS } from '../../town-layout.mjs'
 import { pensordWeapon } from './weapons.ts'
+import { systemPlayerEvent } from './autonomy.ts'
 
 export default defineModule<RpgServer>({
   player,
@@ -47,45 +48,9 @@ export default defineModule<RpgServer>({
           },
         },
       })),
-      {
-        id: 'avatar-su-wan',
-        x: 864,
-        y: 768,
-        event: {
-          onInit() {
-            this.name = '苏晚'
-            this.setGraphic('female')
-            ;(this as any).combatNpc = true
-            ;(this as any).battleAi = {
-              getFaction: () => 'npcs',
-              // Action Battle calls this after a successful event hit. The
-              // test NPC is passive, so it records no retaliation or AI turn.
-              handleDamage: () => undefined,
-            }
-            ;(this as any).actionBattleFaction = 'npcs'
-            ;(this as any).hp = 100
-            this.infiniteMoveRoute([Move.tileLeft(1), Move.tileRight(1)])
-          },
-        },
-      },
-      {
-        id: 'avatar-zhou-bo',
-        x: 992,
-        y: 768,
-        event: {
-          onInit() {
-            this.name = '周博'
-            this.setGraphic('hero')
-            ;(this as any).combatNpc = true
-            ;(this as any).battleAi = {
-              getFaction: () => 'npcs',
-              handleDamage: () => undefined,
-            }
-            ;(this as any).actionBattleFaction = 'npcs'
-            ;(this as any).hp = 100
-          },
-        },
-      },
+      // Legacy identity: id: 'avatar-su-wan' and id: 'avatar-zhou-bo'.
+      systemPlayerEvent(2, '苏晚', 'female', 864, 768),
+      systemPlayerEvent(3, '周博', 'hero', 992, 768),
     ],
   }],
 });

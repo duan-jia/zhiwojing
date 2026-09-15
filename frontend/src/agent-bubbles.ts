@@ -11,8 +11,8 @@ export function setupAgentBubbles(engine: RpgClientEngine) {
   const shown = new Map<string, string>()
   return {
     step() {
-      const room = engine.getCurrentRoom() as { players?: () => Record<string, Record<string, unknown>> }
-      for (const sprite of Object.values(room.players?.() ?? {})) {
+      const room = engine.getCurrentRoom() as { players?: () => Record<string, Record<string, unknown>>; events?: () => Record<string, Record<string, unknown>> }
+      for (const sprite of [...Object.values(room.players?.() ?? {}), ...Object.values(room.events?.() ?? {})]) {
         const id = String(readSpriteValue(sprite.id) ?? '')
         const text = String(readSpriteValue(sprite.agentSpeech) ?? '')
         if (!id || shown.get(id) === text) continue

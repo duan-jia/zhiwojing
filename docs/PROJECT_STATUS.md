@@ -45,7 +45,7 @@ FastAPI 不再持有地图、房间、角色位置或 WebSocket 移动状态；`
 
 ## 前端 Agent 对话
 
-地图在出生点旁保留苏晚（`avatar_id=2`）和周博（`avatar_id=3`）两个静态居民。客户端统一解析静态居民和携带同步 `avatarId` 的在线玩家，在 64 像素范围内选择最近目标；B 打开自己的分身，E 或近距离点击打开目标分身。请求继续调用 `POST /api/agent/chat`，并按 `viewerAvatarId:targetAvatarId` 维持会话。
+地图在出生点旁保留苏晚（`avatar_id=2`）和周博（`avatar_id=3`）两个服务端托管 system-player 实体。它们使用统一挂机状态机持续巡游、模型意图和相遇对话；客户端按在线玩家解析并在 64 像素范围内选择最近目标。系统玩家不占用浏览器连接或 Presence 租约，模型不可用时退化为本地巡游。系统 Agent 请求使用 `SYSTEM_AGENT_TOKEN` 内部凭证；未配置时保持可运行但不调用模型。
 
 ## 在线分身托管（阶段 ⑤）
 

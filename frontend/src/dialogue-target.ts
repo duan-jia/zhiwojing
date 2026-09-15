@@ -68,11 +68,12 @@ export function dialogueTargetForSprite(sprite: unknown): DialogueTarget | null 
   const location = spriteLocation(target)
   if (!location) return null
   const type = readString(target, '_type') || readString(target, 'type')
+  const systemPlayer = Boolean(readSpriteValue(target.systemPlayer))
   return {
     objectId: location.objectId,
     avatarId,
     displayName: readString(target, 'name') || `分身 ${avatarId}`,
-    kind: type === 'player' ? 'player' : 'resident',
+    kind: type === 'player' || systemPlayer || avatarId === 2 || avatarId === 3 ? 'player' : 'resident',
     x: location.x,
     y: location.y,
     sprite: target,

@@ -21,6 +21,37 @@ export const AGENT_LOCATIONS = [
   { id: 'tiangong', name: '天工坊门前', x: 31, y: 41 },
 ] as const
 
+export function systemPlayerEvent(avatarId: number, name: string, graphic: string, x: number, y: number) {
+  return {
+    id: `system-player-${avatarId}`,
+    x,
+    y,
+    event: {
+      onInit(this: any) {
+        this.systemPlayer = true
+        this.name = name
+        this.setGraphic(graphic)
+        this.setHitbox(1, 1)
+        this.setSync({
+          avatarId: { $default: avatarId, $syncWithClient: true, $permanent: false },
+          agentMode: { $default: true, $syncWithClient: true, $permanent: false },
+          agentSpeech: { $default: '', $syncWithClient: true, $permanent: false },
+          agentState: { $default: 'agent', $syncWithClient: true, $permanent: false },
+          defeated: { $default: false, $syncWithClient: true, $permanent: false },
+        })
+        this.avatarId.set(avatarId)
+        this.agentMode.set(true)
+        this.agentState.set('agent')
+        this.hp = 100
+        this.combatNpc = true
+        this.battleAi = { getFaction: () => 'npcs', handleDamage: () => undefined }
+        this.actionBattleFaction = 'npcs'
+        enableAgent(this as AgentActor)
+      },
+    },
+  }
+}
+
 const MEETING_DISTANCE = 2
 const MAX_MODEL_CONCURRENCY = 3
 const API_URL = (typeof process !== 'undefined' && process.env.AVATAR_API_URL) || 'http://127.0.0.1:8000'
@@ -32,12 +63,13 @@ type AgentAction =
   | { action: 'idle' }
 type AgentState = 'human' | 'agent' | 'degraded'
 type Signal<T> = (() => T) & { set(value: T): void }
-type AgentPlayer = RpgPlayer & {
+export type AgentActor = RpgPlayer & {
   authToken?: string
   avatarId: Signal<number>
   agentMode: Signal<boolean>
   agentSpeech: Signal<string>
   agentState: Signal<AgentState>
+  systemPlayer?: boolean
 }
 type State = {
   generation: number
@@ -67,19 +99,19 @@ function value<T>(signal: (() => T) | T): T {
   return typeof signal === 'function' ? (signal as () => T)() : signal
 }
 
-function defeated(player: AgentPlayer) {
+function defeated(player: AgentActor) {
   const prop = (player as any).defeated
   return Boolean(typeof prop === 'function' ? prop() : prop)
 }
 
-function reportPresence(player: AgentPlayer, humanControlled: boolean) {
+function reportPresence(player: AgentActor, humanControlled: boolean) {
   const controller = new AbortController()
   void post(player, '/api/presence', {
     user_id: value(player.avatarId), connection_id: playerId(player), online: true, human_controlled: humanControlled,
   }, controller.signal).catch(error => console.warn('presence update failed', error))
 }
 
-function playerId(player: RpgPlayer) {
+function playerId(player: AgentActor) {
   return String(value((player as unknown as { id: (() => string) | string }).id))
 }
 
@@ -88,12 +120,14 @@ function position(player: RpgPlayer) {
   return { x: Math.round(p.x / TILE_SIZE), y: Math.round(p.y / TILE_SIZE) }
 }
 
-function roomPlayers(player: RpgPlayer): AgentPlayer[] {
-  const map = player.getCurrentMap() as unknown as { getPlayers?: () => AgentPlayer[]; users?: AgentPlayer[] } | null
-  return map?.getPlayers?.() ?? map?.users ?? []
+function roomPlayers(player: AgentActor): AgentActor[] {
+  const map = player.getCurrentMap() as unknown as { getPlayers?: () => AgentActor[]; users?: AgentActor[] } | null
+  const players = map?.getPlayers?.() ?? map?.users ?? []
+  const events = (map as any)?.getEvents?.() ?? []
+  return [...players, ...events.filter((event: any) => event?.systemPlayer)] as AgentActor[]
 }
 
-function nearby(player: AgentPlayer) {
+function nearby(player: AgentActor) {
   if (defeated(player)) return []
   const here = position(player)
   return roomPlayers(player)
@@ -124,15 +158,15 @@ function acquireModelSlot(signal: AbortSignal): Promise<() => void> {
   })
 }
 
-async function post<T>(player: AgentPlayer, path: string, body: object, signal: AbortSignal): Promise<T> {
+async function post<T>(player: AgentActor, path: string, body: object, signal: AbortSignal): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
-    method: 'POST', headers: { 'content-type': 'application/json', ...(player.authToken ? { authorization: `Bearer ${player.authToken}` } : {}) }, body: JSON.stringify(body), signal,
+    method: 'POST', headers: { 'content-type': 'application/json', ...(player.authToken ? { authorization: `Bearer ${player.authToken}` } : {}), ...(player.systemPlayer ? { 'x-system-agent-token': (typeof process !== 'undefined' && process.env.SYSTEM_AGENT_TOKEN) || '' } : {}) }, body: JSON.stringify(body), signal,
   })
   if (!response.ok) throw new Error(`avatar API ${response.status}`)
   return response.json() as Promise<T>
 }
 
-function showBubble(player: AgentPlayer, text: string) {
+function showBubble(player: AgentActor, text: string) {
   player.agentSpeech.set(text)
   const id = playerId(player)
   const previous = bubbleTimers.get(id)
@@ -143,7 +177,7 @@ function showBubble(player: AgentPlayer, text: string) {
   }, 6_000))
 }
 
-function currentState(player: AgentPlayer, generation?: number) {
+function currentState(player: AgentActor, generation?: number) {
   const state = states.get(playerId(player))
   if (!state || (generation !== undefined && state.generation !== generation)) return undefined
   return state
@@ -160,7 +194,7 @@ function locationFor(action: AgentAction): AgentLocation | undefined {
   return AGENT_LOCATIONS.find(location => location.x === action.to.x && location.y === action.to.y)
 }
 
-function scheduleNextLeg(player: AgentPlayer, generation: number) {
+function scheduleNextLeg(player: AgentActor, generation: number) {
   const state = currentState(player, generation)
   if (!state || !value(player.agentMode) || defeated(player)) return
   if (state.dwellTimer) clearTimeout(state.dwellTimer)
@@ -174,7 +208,7 @@ function scheduleNextLeg(player: AgentPlayer, generation: number) {
 
 // moveTo uses the physics body's center and a 48px arrival radius.
 // Observe arrival only; SeekAvoid owns velocity and stopping at the target.
-function observeArrival(player: AgentPlayer, generation: number) {
+function observeArrival(player: AgentActor, generation: number) {
   const state = currentState(player, generation)
   if (!state?.currentTarget || !value(player.agentMode) || defeated(player)) return
   state.arrivalTimer = setTimeout(() => {
@@ -201,7 +235,7 @@ function observeArrival(player: AgentPlayer, generation: number) {
   }, 1_000)
 }
 
-function startNextLeg(player: AgentPlayer, generation: number) {
+function startNextLeg(player: AgentActor, generation: number) {
   const state = currentState(player, generation)
   if (!state || state.moving || !value(player.agentMode) || defeated(player)) return
   const target = state.pendingIntent ?? chooseLocation(AGENT_LOCATIONS, [state.currentTarget?.id, state.previousTargetId])
@@ -223,7 +257,7 @@ function startNextLeg(player: AgentPlayer, generation: number) {
   }
 }
 
-function scheduleModelRetry(player: AgentPlayer, generation: number, delay: number) {
+function scheduleModelRetry(player: AgentActor, generation: number, delay: number) {
   const state = currentState(player, generation)
   if (!state) return
   if (state.modelTimer) clearTimeout(state.modelTimer)
@@ -235,7 +269,7 @@ function scheduleModelRetry(player: AgentPlayer, generation: number, delay: numb
   }, delay)
 }
 
-async function refreshIntent(player: AgentPlayer, generation: number) {
+async function refreshIntent(player: AgentActor, generation: number) {
   const state = currentState(player, generation)
   if (!state || state.requestAbort || !value(player.agentMode) || defeated(player) || Date.now() < state.nextModelAt) return
   const controller = new AbortController()
@@ -274,7 +308,7 @@ async function refreshIntent(player: AgentPlayer, generation: number) {
   }
 }
 
-async function startMeeting(player: AgentPlayer, other: AgentPlayer, generation: number, pair: string) {
+async function startMeeting(player: AgentActor, other: AgentActor, generation: number, pair: string) {
   const controller = new AbortController()
   const state = currentState(player, generation)
   if (!state) return
@@ -299,7 +333,7 @@ async function startMeeting(player: AgentPlayer, other: AgentPlayer, generation:
   }
 }
 
-function scheduleMeetingCheck(player: AgentPlayer, generation: number) {
+function scheduleMeetingCheck(player: AgentActor, generation: number) {
   const state = currentState(player, generation)
   if (!state || !value(player.agentMode) || defeated(player)) return
   state.meetingTimer = setTimeout(() => {
@@ -319,11 +353,11 @@ function scheduleMeetingCheck(player: AgentPlayer, generation: number) {
   }, 1_500)
 }
 
-export function enableAgent(player: AgentPlayer) {
+export function enableAgent(player: AgentActor) {
   disposeAgent(player)
   player.agentMode.set(true)
   player.agentState.set('agent')
-  reportPresence(player, false)
+  if (!player.systemPlayer) reportPresence(player, false)
   const state: State = {
     generation: Date.now() + Math.random(), moving: false, nextModelAt: 0, failures: 0,
     meetingAborts: new Set(),
@@ -335,7 +369,7 @@ export function enableAgent(player: AgentPlayer) {
   scheduleMeetingCheck(player, state.generation)
 }
 
-export function disposeAgent(player: AgentPlayer) {
+export function disposeAgent(player: AgentActor) {
   const id = playerId(player)
   const state = states.get(id)
   if (state) {
@@ -352,19 +386,19 @@ export function disposeAgent(player: AgentPlayer) {
   try { player.stopMoveTo() } catch { /* Player may already have left its map. */ }
 }
 
-export function takeControl(player: AgentPlayer) {
+export function takeControl(player: AgentActor) {
   disposeAgent(player)
   player.agentMode.set(false)
   player.agentState.set('human')
-  reportPresence(player, true)
+  if (!player.systemPlayer) reportPresence(player, true)
 }
 
-export function toggleAgent(player: AgentPlayer) {
+export function toggleAgent(player: AgentActor) {
   if (value(player.agentMode)) takeControl(player)
   else enableAgent(player)
 }
 
-export function pauseAgent(player: AgentPlayer) {
+export function pauseAgent(player: AgentActor) {
   const state = currentState(player)
   try { player.stopMoveTo() } catch { /* Player may already have left its map. */ }
   if (!state) return
@@ -377,7 +411,7 @@ export function pauseAgent(player: AgentPlayer) {
   state.moveStartedAt = undefined
 }
 
-export function resumeAgent(player: AgentPlayer) {
+export function resumeAgent(player: AgentActor) {
   if (!value(player.agentMode) || defeated(player)) return
   const state = currentState(player)
   if (!state) {

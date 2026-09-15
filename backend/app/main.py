@@ -370,6 +370,10 @@ def _auth_required() -> bool:
     return os.getenv("AUTH_REQUIRED", "0") == "1"
 
 
+SYSTEM_AVATAR_IDS = frozenset({2, 3})
+SYSTEM_AGENT_PATHS = frozenset({"/api/agent/chat", "/api/agent/step", "/api/presence"})
+
+
 def _auth_error(code: str = "AUTH_REQUIRED", message: str = "请提供有效的登录凭证。") -> HTTPException:
     return HTTPException(401, detail={"code": code, "message": message, "retryable": False})
 
@@ -413,6 +417,20 @@ def _request_user_id(request: Request, legacy_user_id: int = 1) -> int:
     return legacy_user_id
 
 
+def _system_agent_authenticated(request: Request) -> bool:
+    configured = os.getenv("SYSTEM_AGENT_TOKEN", "").strip()
+    supplied = request.headers.get("x-system-agent-token", "").strip()
+    return bool(configured and supplied and secrets.compare_digest(configured, supplied))
+
+
+def _request_actor_id(request: Request, requested_id: int) -> int:
+    if getattr(request.state, "system_agent", False):
+        if requested_id not in SYSTEM_AVATAR_IDS:
+            raise HTTPException(403, detail={"code": "SYSTEM_AVATAR_FORBIDDEN", "message": "系统凭证只能操作常驻系统分身。"})
+        return requested_id
+    return _request_user_id(request, requested_id)
+
+
 def _issue_token(session: Session, user_id: int) -> str:
     token = secrets.token_urlsafe(32)
     try:
@@ -435,6 +453,13 @@ async def authenticate_request(request: Request, call_next):
         or request.url.path in {"/api/oauth/status", "/api/oauth/start", "/auth/callback"}
     )
     if request.method == "OPTIONS" or public:
+        return await call_next(request)
+    supplied_system_token = request.headers.get("x-system-agent-token", "").strip()
+    if supplied_system_token:
+        if request.url.path not in SYSTEM_AGENT_PATHS or not _system_agent_authenticated(request):
+            error = _auth_error("INVALID_SYSTEM_TOKEN", "系统服务凭证无效。")
+            return JSONResponse(status_code=401, content={"detail": error.detail})
+        request.state.system_agent = True
         return await call_next(request)
     authenticated = _authenticated(request)
     if authenticated is not None:
@@ -679,7 +704,7 @@ async def auth_browser_session(request: Request):
 
 @app.post("/api/agent/chat", response_model=AgentChatResponse)
 async def agent_chat(payload: AgentChatRequest, request: Request):
-    current_user_id = _request_user_id(request, payload.user_id)
+    current_user_id = _request_actor_id(request, payload.user_id)
     with Session(engine) as session:
         avatar = session.get(User, payload.avatar_id)
         if not avatar:
@@ -718,7 +743,7 @@ async def agent_chat(payload: AgentChatRequest, request: Request):
 
 @app.post("/api/agent/step", response_model=AgentStepResponse)
 async def agent_step(payload: AgentStepRequest, request: Request):
-    avatar_id = _request_user_id(request, payload.avatar_id)
+    avatar_id = _request_actor_id(request, payload.avatar_id)
     card = communication_store.get_persona(avatar_id) or {}
     try:
         decision = await agent_runtime.step(
@@ -800,7 +825,7 @@ def _presence_state(session: Session, user_id: int) -> tuple[bool, bool]:
 
 @app.post("/api/presence")
 async def update_presence(payload: PresenceRequest, request: Request):
-    user_id = _request_user_id(request, payload.user_id)
+    user_id = _request_actor_id(request, payload.user_id)
     lease_id = f"{user_id}:{payload.connection_id}"
     with Session(engine) as session:
         if not session.get(User, user_id):
